@@ -21,9 +21,8 @@ const DEFAULT_HOURS = {
   6: { open: true, morning_start: '09:00', morning_end: '11:30', afternoon_start: '13:30', afternoon_end: '19:30' },
 }
 
-// slots de 30 em 30 min das 06:00 às 23:00
 const TIME_SLOTS = Array.from({ length: 35 }, (_, i) => {
-  const total = 360 + i * 30 // começa em 06:00
+  const total = 360 + i * 30
   const h = String(Math.floor(total / 60)).padStart(2, '0')
   const m = String(total % 60).padStart(2, '0')
   return `${h}:${m}`
@@ -34,6 +33,14 @@ function slugify(v) {
 }
 function centsToReal(cents) { return (cents / 100).toFixed(2).replace('.', ',') }
 function realToCents(v) { return Math.round(parseFloat(v.replace(',', '.')) * 100) || 0 }
+
+function formatPhone(v) {
+  const d = v.replace(/\D/g, '').slice(0, 11)
+  if (!d.length) return ''
+  if (d.length <= 2) return `(${d}`
+  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+}
 
 // ── select de horário customizado ─────────────────────────────────────────────
 function TimeSelect({ value, onChange, placeholder = '—' }) {
@@ -72,8 +79,7 @@ export default function Onboarding({ owner, onComplete }) {
   // step 1
   const [barbName, setBarbName] = useState(owner.name || '')
   const [slug, setSlug]         = useState(owner.slug || '')
-  const [whatsapp, setWhatsapp] = useState(owner.whatsapp || '')
-  const [apikey, setApikey]     = useState(owner.callmebot_apikey || '')
+  const [whatsapp, setWhatsapp] = useState(owner.whatsapp ? formatPhone(owner.whatsapp.replace(/^55/, '').slice(-11)) : '')
   const [slugStatus, setSlugStatus] = useState('idle')
   const slugTimer = useRef(null)
 
@@ -102,8 +108,9 @@ export default function Onboarding({ owner, onComplete }) {
     setError('')
     setSaving(true)
     try {
+      const rawPhone = whatsapp.replace(/\D/g, '')
       const { error: e1 } = await supabase.from('owners').update({
-        name: barbName.trim(), slug, whatsapp: whatsapp.trim(), callmebot_apikey: apikey.trim(), active: true,
+        name: barbName.trim(), slug, whatsapp: rawPhone, active: true,
       }).eq('id', owner.id)
       if (e1) throw e1
 
@@ -123,7 +130,7 @@ export default function Onboarding({ owner, onComplete }) {
       const { error: e3 } = await supabase.from('hours_config').insert(hrs)
       if (e3) throw e3
 
-      onComplete({ ...owner, name: barbName.trim(), slug, whatsapp, callmebot_apikey: apikey })
+      onComplete({ ...owner, name: barbName.trim(), slug, whatsapp: rawPhone })
     } catch (err) {
       setError(err.message || 'Erro ao salvar. Tente novamente.')
     } finally {
@@ -173,7 +180,7 @@ export default function Onboarding({ owner, onComplete }) {
   const slugHint = {
     idle:      slug.length > 0 && slug.length < 3 ? 'Mínimo 3 caracteres.' : 'Esta será a URL pública do seu app de agendamento.',
     checking:  'Verificando disponibilidade...',
-    available: `✓ Disponível — navalha.app/${slug}`,
+    available: `✓ Disponível — barbearia-app-gamma.vercel.app/${slug}`,
     taken:     'Este slug já está em uso. Escolha outro.',
   }[slugStatus]
 
@@ -192,8 +199,14 @@ export default function Onboarding({ owner, onComplete }) {
         error={slugStatus === 'taken' ? slugHint : ''}
         hint={slugStatus !== 'taken' ? slugHint : ''}
       />
-      <Input label="WhatsApp" placeholder="5551999999999" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} hint="Com código do país. Ex: 5551999999999" />
-      <Input label="API Key CallMeBot" placeholder="123456" value={apikey} onChange={e => setApikey(e.target.value)} hint="Opcional — notificações no WhatsApp." />
+      <Input
+        label="WhatsApp"
+        placeholder="(XX) XXXXX-XXXX"
+        value={whatsapp}
+        onChange={e => setWhatsapp(formatPhone(e.target.value))}
+        inputMode="numeric"
+        hint="Número para receber notificações de agendamento."
+      />
       <PrimaryBtn disabled={!step1Valid} onClick={() => setStep(2)}>Continuar</PrimaryBtn>
     </>
   )
@@ -251,7 +264,6 @@ export default function Onboarding({ owner, onComplete }) {
           const cfg = hours[wd]
           return (
             <div key={wd} style={{ background: INK2, border: `1px solid ${cfg.open ? HAIRLINE : 'transparent'}`, borderRadius: RADIUS, overflow: 'hidden', transition: 'border-color 0.2s' }}>
-              {/* cabeçalho do dia */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}>
                 <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: cfg.open ? T.primary : T.hint }}>{dia}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -262,11 +274,9 @@ export default function Onboarding({ owner, onComplete }) {
                 </div>
               </div>
 
-              {/* horários — expandem quando aberto */}
               {cfg.open && (
                 <div style={{ padding: '0 16px 14px', borderTop: `1px solid ${HAIRLINE}` }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 12 }}>
-                    {/* manhã */}
                     <div>
                       <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>Manhã</p>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -275,7 +285,6 @@ export default function Onboarding({ owner, onComplete }) {
                         <TimeSelect value={cfg.morning_end} onChange={v => setHourField(wd, 'morning_end', v)} placeholder="fim" />
                       </div>
                     </div>
-                    {/* tarde */}
                     <div>
                       <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>Tarde</p>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

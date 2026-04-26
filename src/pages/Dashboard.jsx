@@ -6,6 +6,9 @@ import {
 } from '../components/ui.jsx'
 import { FONT, FONT_MONO, T, ACCENT, ACCENT_DIM, INK, INK2, HAIRLINE, RADIUS, STATUS_COLOR } from '../tokens.js'
 
+// URL base do app de agendamento do cliente
+const CLIENT_APP_URL = 'https://barbearia-app-gamma.vercel.app'
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 function today()      { return new Date().toISOString().split('T')[0] }
 function fmtDateFull(d) { return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) }
@@ -16,6 +19,20 @@ function strToCents(v){ return Math.round(parseFloat(v.replace(',', '.')) * 100)
 function getDaysInMonth(y, m) { return new Date(y, m + 1, 0).getDate() }
 function getFirstDay(y, m)    { return new Date(y, m, 1).getDay() }
 function slugify(v)   { return v.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/^-+|-+$/g, '') }
+function formatPhone(v) {
+  const d = v.replace(/\D/g, '').slice(0, 11)
+  if (!d.length) return ''
+  if (d.length <= 2) return `(${d}`
+  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+}
+function phoneToDisplay(raw) {
+  if (!raw) return ''
+  // remove DDI 55 se vier com 13 dígitos
+  const digits = raw.replace(/\D/g, '')
+  const local = digits.length === 13 && digits.startsWith('55') ? digits.slice(2) : digits
+  return formatPhone(local)
+}
 
 const DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 
@@ -71,11 +88,15 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
   // ── perfil ─────────────────────────────────────────────────────────────────
   const [profName,     setProfName]     = useState(owner.name || '')
   const [profSlug,     setProfSlug]     = useState(owner.slug || '')
-  const [profWhatsapp, setProfWhatsapp] = useState(owner.whatsapp || '')
-  const [profApikey,   setProfApikey]   = useState(owner.callmebot_apikey || '')
+  const [profWhatsapp, setProfWhatsapp] = useState(phoneToDisplay(owner.whatsapp))
+  const [authEmail,    setAuthEmail]    = useState('')
   const [slugStatus,   setSlugStatus]   = useState('idle')
   const [profSaving,   setProfSaving]   = useState(false)
   const slugTimer = useRef(null)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setAuthEmail(data?.user?.email || ''))
+  }, [])
 
   useEffect(() => {
     if (!profSlug || profSlug.length < 3 || profSlug === owner.slug) { setSlugStatus(profSlug === owner.slug ? 'same' : 'idle'); return }
@@ -92,8 +113,9 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
     if (!profName.trim()) return
     if (slugStatus === 'taken') return
     setProfSaving(true)
+    const rawPhone = profWhatsapp.replace(/\D/g, '')
     const { data, error } = await supabase.from('owners')
-      .update({ name: profName.trim(), slug: profSlug, whatsapp: profWhatsapp.trim(), callmebot_apikey: profApikey.trim() })
+      .update({ name: profName.trim(), slug: profSlug, whatsapp: rawPhone })
       .eq('id', owner.id)
       .select()
       .single()
@@ -103,7 +125,8 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
     showToast('Perfil atualizado.')
   }
 
-  const slugHint = { idle: 'URL pública do app de agendamento.', same: `navalha.app/${profSlug}`, checking: 'Verificando...', available: `✓ Disponível — navalha.app/${profSlug}`, taken: 'Slug já em uso.' }[slugStatus]
+  const clientUrl = `${CLIENT_APP_URL}/${profSlug || owner.slug}`
+  const slugHint = { idle: 'URL pública do app de agendamento.', same: clientUrl, checking: 'Verificando...', available: `✓ Disponível — ${clientUrl}`, taken: 'Slug já em uso.' }[slugStatus]
   const slugError = slugStatus === 'taken' ? slugHint : ''
   const profileValid = profName.trim().length >= 2 && profSlug.length >= 3 && slugStatus !== 'taken' && slugStatus !== 'checking'
 
@@ -200,6 +223,26 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
       {/* PERFIL */}
       {tab === 'profile' && (
         <div style={{ maxWidth: 480 }}>
+          {/* card: link do cliente */}
+          <div style={{ background: `${ACCENT}12`, border: `1px solid ${ACCENT}40`, borderRadius: RADIUS, padding: '16px 18px', marginBottom: 24 }}>
+            <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: ACCENT, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>Link dos clientes</p>
+            <p style={{ fontFamily: FONT, fontSize: 12, color: T.muted, marginBottom: 10 }}>Compartilhe este link para seus clientes fazerem agendamentos.</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.primary, wordBreak: 'break-all', flex: 1 }}>{clientUrl}</span>
+              <button
+                onClick={() => navigator.clipboard?.writeText(clientUrl).then(() => showToast('Link copiado.'))}
+                style={{ background: ACCENT, border: 'none', borderRadius: RADIUS - 4, padding: '7px 14px', color: INK, fontFamily: FONT_MONO, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+              >
+                Copiar
+              </button>
+              <a href={clientUrl} target="_blank" rel="noreferrer"
+                style={{ background: 'transparent', border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS - 4, padding: '6px 12px', color: T.muted, fontFamily: FONT_MONO, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, textDecoration: 'none' }}
+              >
+                Abrir
+              </a>
+            </div>
+          </div>
+
           <Input label="Nome da barbearia" value={profName} onChange={e => setProfName(e.target.value)} placeholder="Barbearia do João" />
           <Input
             label="Slug (URL)"
@@ -209,8 +252,22 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
             hint={!slugError ? slugHint : ''}
             error={slugError}
           />
-          <Input label="WhatsApp" value={profWhatsapp} onChange={e => setProfWhatsapp(e.target.value)} placeholder="5551999999999" hint="Com código do país." />
-          <Input label="API Key CallMeBot" value={profApikey} onChange={e => setProfApikey(e.target.value)} placeholder="123456" hint="Para notificações no WhatsApp." />
+          {authEmail && (
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>E-mail da conta</p>
+              <div style={{ padding: '11px 14px', background: 'rgba(255,255,255,0.04)', border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, fontFamily: FONT, fontSize: 14, color: T.muted }}>
+                {authEmail}
+              </div>
+            </div>
+          )}
+          <Input
+            label="WhatsApp"
+            placeholder="(XX) XXXXX-XXXX"
+            value={profWhatsapp}
+            onChange={e => setProfWhatsapp(formatPhone(e.target.value))}
+            inputMode="numeric"
+            hint="Número para receber notificações de agendamento."
+          />
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
             <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint }}>Plano: <span style={{ color: ACCENT }}>{owner.plan}</span></p>
           </div>
@@ -391,7 +448,18 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
       <div style={{ padding: '16px 20px', borderTop: `1px solid ${HAIRLINE}` }}>
         <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Barbearia</p>
         <p style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: T.primary, marginBottom: 2 }}>{owner.name}</p>
-        <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, marginBottom: 12 }}>/{owner.slug}</p>
+        {owner.slug && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+            <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>/{owner.slug}</p>
+            <button
+              title="Copiar link dos clientes"
+              onClick={() => navigator.clipboard?.writeText(`${CLIENT_APP_URL}/${owner.slug}`).then(() => showToast('Link copiado.'))}
+              style={{ background: 'transparent', border: `1px solid ${HAIRLINE}`, borderRadius: 6, padding: '3px 8px', color: ACCENT, fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer', flexShrink: 0 }}
+            >
+              copiar link
+            </button>
+          </div>
+        )}
         <GhostBtn onClick={onSignOut} style={{ fontSize: 12, color: '#F87171' }}>Sair</GhostBtn>
       </div>
     </div>
