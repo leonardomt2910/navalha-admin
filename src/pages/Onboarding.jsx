@@ -28,9 +28,8 @@ const TIME_SLOTS = Array.from({ length: 35 }, (_, i) => {
   return `${h}:${m}`
 })
 
-function slugify(v) {
-  return v.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/^-+|-+$/g, '')
-}
+function softSlugify(v) { return v.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') }
+function slugify(v)     { return softSlugify(v).replace(/^-+|-+$/g, '') }
 function centsToReal(cents) { return (cents / 100).toFixed(2).replace('.', ',') }
 function realToCents(v) { return Math.round(parseFloat(v.replace(',', '.')) * 100) || 0 }
 
@@ -126,6 +125,7 @@ export default function Onboarding({ owner, onComplete }) {
         morning_end:      cfg.open ? cfg.morning_end      || null : null,
         afternoon_start:  cfg.open ? cfg.afternoon_start  || null : null,
         afternoon_end:    cfg.open ? cfg.afternoon_end    || null : null,
+        blocked_ranges:   cfg.open ? (cfg.blocked_ranges || []).filter(r => r.start && r.end) : [],
       }))
       const { error: e3 } = await supabase.from('hours_config').insert(hrs)
       if (e3) throw e3
@@ -167,6 +167,16 @@ export default function Onboarding({ owner, onComplete }) {
     setHours(h => ({ ...h, [wd]: { ...h[wd], [field]: val } }))
   }
 
+  function addBlockedRange(wd) {
+    setHours(h => ({ ...h, [wd]: { ...h[wd], blocked_ranges: [...(h[wd]?.blocked_ranges || []), { start: '', end: '' }] } }))
+  }
+  function removeBlockedRange(wd, idx) {
+    setHours(h => ({ ...h, [wd]: { ...h[wd], blocked_ranges: (h[wd]?.blocked_ranges || []).filter((_, i) => i !== idx) } }))
+  }
+  function updateBlockedRange(wd, idx, field, val) {
+    setHours(h => ({ ...h, [wd]: { ...h[wd], blocked_ranges: (h[wd]?.blocked_ranges || []).map((r, i) => i === idx ? { ...r, [field]: val } : r) } }))
+  }
+
   // ── barra de progresso ───────────────────────────────────────────────────────
   const progress = (
     <div style={{ display: 'flex', gap: 6, marginBottom: 32 }}>
@@ -195,7 +205,8 @@ export default function Onboarding({ owner, onComplete }) {
         label="Slug (URL)"
         placeholder="joao-barbearia"
         value={slug}
-        onChange={e => setSlug(slugify(e.target.value))}
+        onChange={e => setSlug(softSlugify(e.target.value))}
+        onBlur={e => setSlug(slugify(e.target.value))}
         error={slugStatus === 'taken' ? slugHint : ''}
         hint={slugStatus !== 'taken' ? slugHint : ''}
       />
@@ -215,7 +226,7 @@ export default function Onboarding({ owner, onComplete }) {
   const renderStep2 = (
     <>
       <Eyebrow>Passo 2 de 3</Eyebrow>
-      <h2 style={{ fontFamily: FONT, fontSize: 22, fontWeight: 700, color: T.primary, marginBottom: 24, letterSpacing: '-0.02em' }}>Serviços.</h2>
+      <h2 style={{ fontFamily: FONT, fontSize: 22, fontWeight: 700, color: T.primary, marginBottom: 24, letterSpacing: '-0.02em' }}>Configure seus serviços.</h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
         {services.map((svc, idx) => (
           <div key={svc._id}>
@@ -256,8 +267,8 @@ export default function Onboarding({ owner, onComplete }) {
   const renderStep3 = (
     <>
       <Eyebrow>Passo 3 de 3</Eyebrow>
-      <h2 style={{ fontFamily: FONT, fontSize: 22, fontWeight: 700, color: T.primary, marginBottom: 8, letterSpacing: '-0.02em' }}>Horários.</h2>
-      <p style={{ fontFamily: FONT, fontSize: 13, color: T.hint, marginBottom: 24 }}>Configure os horários de funcionamento por dia da semana.</p>
+      <h2 style={{ fontFamily: FONT, fontSize: 22, fontWeight: 700, color: T.primary, marginBottom: 8, letterSpacing: '-0.02em' }}>Configure seus horários.</h2>
+      <p style={{ fontFamily: FONT, fontSize: 13, color: T.hint, marginBottom: 24 }}>Defina os horários de funcionamento e bloqueie períodos específicos.</p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 24 }}>
         {DIAS.map((dia, wd) => {
@@ -275,7 +286,7 @@ export default function Onboarding({ owner, onComplete }) {
               </div>
 
               {cfg.open && (
-                <div style={{ padding: '0 16px 14px', borderTop: `1px solid ${HAIRLINE}` }}>
+                <div style={{ padding: '0 16px 16px', borderTop: `1px solid ${HAIRLINE}` }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 12 }}>
                     <div>
                       <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>Manhã</p>
@@ -294,6 +305,26 @@ export default function Onboarding({ owner, onComplete }) {
                       </div>
                     </div>
                   </div>
+                  {(cfg.blocked_ranges || []).length > 0 && (
+                    <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px dashed ${HAIRLINE}` }}>
+                      <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: '#F87171', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10 }}>Períodos bloqueados</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {(cfg.blocked_ranges || []).map((range, ri) => (
+                          <div key={ri} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <div style={{ flex: 1 }}><TimeSelect value={range.start} onChange={v => updateBlockedRange(wd, ri, 'start', v)} placeholder="início" /></div>
+                            <span style={{ color: T.hint, fontSize: 12, flexShrink: 0 }}>→</span>
+                            <div style={{ flex: 1 }}><TimeSelect value={range.end} onChange={v => updateBlockedRange(wd, ri, 'end', v)} placeholder="fim" /></div>
+                            <button onClick={() => removeBlockedRange(wd, ri)}
+                              style={{ background: 'transparent', border: `1px solid rgba(248,113,113,0.3)`, borderRadius: 6, width: 28, height: 28, cursor: 'pointer', color: '#F87171', fontSize: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <button onClick={() => addBlockedRange(wd)}
+                    style={{ marginTop: 12, background: 'transparent', border: `1px dashed rgba(248,113,113,0.4)`, borderRadius: 8, padding: '6px 14px', color: '#F87171', fontFamily: FONT_MONO, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer' }}>
+                    + Bloquear período
+                  </button>
                 </div>
               )}
             </div>

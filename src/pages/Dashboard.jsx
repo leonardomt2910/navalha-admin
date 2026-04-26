@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase.js'
 import {
   NavalhaLogo, Eyebrow, PrimaryBtn, SecBtn, GhostBtn, IconBtn,
-  Badge, Card, Modal, Toast, Spinner, Divider, PageTitle, Input, Field,
+  Badge, Card, Modal, Toast, Spinner, Divider, PageTitle, Input,
 } from '../components/ui.jsx'
 import { FONT, FONT_MONO, T, ACCENT, ACCENT_DIM, INK, INK2, HAIRLINE, RADIUS, STATUS_COLOR } from '../tokens.js'
 
@@ -10,15 +10,16 @@ import { FONT, FONT_MONO, T, ACCENT, ACCENT_DIM, INK, INK2, HAIRLINE, RADIUS, ST
 const CLIENT_APP_URL = 'https://barbearia-app-gamma.vercel.app'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-function today()      { return new Date().toISOString().split('T')[0] }
+function today()        { return new Date().toISOString().split('T')[0] }
 function fmtDateFull(d) { return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) }
 function fmtMonthYear(d){ return d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) }
-function fmtPrice(c)  { return `R$ ${(c / 100).toFixed(2).replace('.', ',')}` }
-function centsToStr(c){ return (c / 100).toFixed(2).replace('.', ',') }
-function strToCents(v){ return Math.round(parseFloat(v.replace(',', '.')) * 100) || 0 }
+function fmtPrice(c)    { return `R$ ${(c / 100).toFixed(2).replace('.', ',')}` }
+function centsToStr(c)  { return (c / 100).toFixed(2).replace('.', ',') }
+function strToCents(v)  { return Math.round(parseFloat(v.replace(',', '.')) * 100) || 0 }
 function getDaysInMonth(y, m) { return new Date(y, m + 1, 0).getDate() }
-function getFirstDay(y, m)    { return new Date(y, m, 1).getDay() }
-function slugify(v)   { return v.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/^-+|-+$/g, '') }
+function getFirstDay(y, m)    { return (new Date(y, m, 1).getDay() + 6) % 7 } // 0=Seg … 6=Dom
+function softSlugify(v) { return v.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') }
+function slugify(v)     { return softSlugify(v).replace(/^-+|-+$/g, '') }
 function formatPhone(v) {
   const d = v.replace(/\D/g, '').slice(0, 11)
   if (!d.length) return ''
@@ -28,13 +29,14 @@ function formatPhone(v) {
 }
 function phoneToDisplay(raw) {
   if (!raw) return ''
-  // remove DDI 55 se vier com 13 dígitos
   const digits = raw.replace(/\D/g, '')
   const local = digits.length === 13 && digits.startsWith('55') ? digits.slice(2) : digits
   return formatPhone(local)
 }
 
-const DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+const DIAS      = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+const DIAS_ABBR = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+const WEEK_LABELS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'] // Mon-first
 
 const TIME_SLOTS = Array.from({ length: 35 }, (_, i) => {
   const total = 360 + i * 30
@@ -43,18 +45,18 @@ const TIME_SLOTS = Array.from({ length: 35 }, (_, i) => {
   return `${h}:${m}`
 })
 
-// ── nav ───────────────────────────────────────────────────────────────────────
 const NAV = [
-  { key: 'bookings',  label: 'Agendamentos', icon: '◈' },
-  { key: 'calendar',  label: 'Calendário',   icon: '▦' },
-  { key: 'reports',   label: 'Relatórios',   icon: '▤' },
-  { key: 'settings',  label: 'Configurações', icon: '◎' },
+  { key: 'bookings', label: 'Agendamentos', icon: '◈' },
+  { key: 'calendar', label: 'Calendário',   icon: '▦' },
+  { key: 'reports',  label: 'Relatórios',   icon: '▤' },
+  { key: 'settings', label: 'Configurações', icon: '◎' },
 ]
 
 // ── componentes locais ────────────────────────────────────────────────────────
 function TimeSelect({ value, onChange, placeholder = '—' }) {
   return (
-    <select value={value || ''} onChange={e => onChange(e.target.value)} style={{ width: '100%', padding: '9px 10px', background: INK, border: `1px solid ${HAIRLINE}`, borderRadius: 8, color: value ? T.primary : T.hint, fontFamily: FONT_MONO, fontSize: 13, cursor: 'pointer', appearance: 'none', WebkitAppearance: 'none' }}>
+    <select value={value || ''} onChange={e => onChange(e.target.value)}
+      style={{ width: '100%', padding: '9px 10px', background: INK, border: `1px solid ${HAIRLINE}`, borderRadius: 8, color: value ? T.primary : T.hint, fontFamily: FONT_MONO, fontSize: 13, cursor: 'pointer', appearance: 'none', WebkitAppearance: 'none' }}>
       <option value="" disabled>{placeholder}</option>
       {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
     </select>
@@ -81,7 +83,223 @@ function SettingsTabs({ active, onChange }) {
   )
 }
 
-// ── seção configurações (componente externo para não remontar) ─────────────────
+// ── seção agendamentos ─────────────────────────────────────────────────────────
+function BookingsSection({ bookings, loading, updateStatus, deleteBooking }) {
+  const [filterDate,   setFilterDate]   = useState(today())
+  const [filterStatus, setFilterStatus] = useState('all')
+  const [detail,       setDetail]       = useState(null)
+
+  const filtered = bookings.filter(b => {
+    const matchDate   = !filterDate || b.date === filterDate
+    const matchStatus = filterStatus === 'all' || b.status === filterStatus
+    return matchDate && matchStatus
+  })
+
+  return (
+    <div>
+      <PageTitle>Agendamentos</PageTitle>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div>
+          <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Data</p>
+          <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={{ padding: '10px 12px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, color: T.primary, fontFamily: FONT_MONO, fontSize: 13, colorScheme: 'dark', cursor: 'pointer' }} />
+        </div>
+        <div>
+          <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Status</p>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ padding: '10px 12px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, color: T.primary, fontFamily: FONT, fontSize: 13, cursor: 'pointer' }}>
+            <option value="all">Todos</option>
+            <option value="confirmed">Confirmado</option>
+            <option value="rejected">Cancelado</option>
+            <option value="manual">Manual</option>
+          </select>
+        </div>
+        <GhostBtn onClick={() => { setFilterDate(''); setFilterStatus('all') }}>Limpar filtros</GhostBtn>
+      </div>
+
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner /></div>
+      ) : filtered.length === 0 ? (
+        <p style={{ fontFamily: FONT, fontSize: 14, color: T.hint, padding: '40px 0', textAlign: 'center' }}>Nenhum agendamento encontrado.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {filtered.map(b => (
+            <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 18px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, cursor: 'pointer' }} onClick={() => setDetail(b)}>
+              <div style={{ fontFamily: FONT_MONO, fontSize: 16, fontWeight: 600, color: ACCENT, minWidth: 48 }}>{b.hour?.slice(0, 5)}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary, marginBottom: 2 }}>{b.client_name}</p>
+                <p style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.muted }}>{b.services?.name ?? '—'} · {new Date(b.date + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
+              </div>
+              <Badge status={b.status} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {detail && (
+        <Modal onClose={() => setDetail(null)}>
+          <Card>
+            <Eyebrow>Detalhes do agendamento</Eyebrow>
+            <h3 style={{ fontFamily: FONT, fontSize: 20, fontWeight: 700, color: T.primary, marginBottom: 20 }}>{detail.client_name}</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
+              {[
+                ['Serviço',  detail.services?.name ?? '—'],
+                ['Data',     fmtDateFull(detail.date)],
+                ['Horário',  detail.hour?.slice(0, 5)],
+                ['Telefone', detail.client_phone],
+                ['Status',   <Badge key="s" status={detail.status} />],
+                detail.notes && ['Obs.', detail.notes],
+              ].filter(Boolean).map(([label, value]) => (
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</span>
+                  <span style={{ fontFamily: FONT, fontSize: 14, color: T.primary }}>{value}</span>
+                </div>
+              ))}
+            </div>
+            <Divider />
+            <div style={{ display: 'flex', gap: 8 }}>
+              {detail.status !== 'rejected' && (
+                <SecBtn onClick={() => { updateStatus(detail.id, 'rejected'); setDetail(null) }} style={{ flex: 1 }}>Cancelar agendamento</SecBtn>
+              )}
+              <IconBtn danger onClick={() => { deleteBooking(detail.id); setDetail(null) }}>Remover</IconBtn>
+            </div>
+          </Card>
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+// ── seção calendário ──────────────────────────────────────────────────────────
+function CalendarSection({ bookings, updateStatus }) {
+  const now = new Date()
+  const [calYear,  setCalYear]  = useState(now.getFullYear())
+  const [calMonth, setCalMonth] = useState(now.getMonth())
+  const [selDay,   setSelDay]   = useState(null)
+
+  const daysInMonth = getDaysInMonth(calYear, calMonth)
+  const firstDay    = getFirstDay(calYear, calMonth) // Mon-first offset
+  const monthDate   = new Date(calYear, calMonth, 1)
+
+  function prevMonth() {
+    setSelDay(null)
+    if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11) } else setCalMonth(m => m - 1)
+  }
+  function nextMonth() {
+    setSelDay(null)
+    if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0) } else setCalMonth(m => m + 1)
+  }
+
+  const todayStr    = today()
+  const selectedStr = selDay != null ? `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(selDay).padStart(2, '0')}` : null
+  const dayBookings = selectedStr ? bookings.filter(b => b.date === selectedStr) : []
+
+  function bookingsForDay(day) {
+    const d = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    return bookings.filter(b => b.date === d)
+  }
+
+  return (
+    <div>
+      <PageTitle>Calendário</PageTitle>
+      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        {/* grade do mês */}
+        <div style={{ flex: '0 0 auto', width: 320 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <button onClick={prevMonth} style={{ background: 'none', border: `1px solid ${HAIRLINE}`, borderRadius: 8, padding: '6px 14px', color: T.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>←</button>
+            <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15, color: T.primary, textTransform: 'capitalize' }}>{fmtMonthYear(monthDate)}</p>
+            <button onClick={nextMonth} style={{ background: 'none', border: `1px solid ${HAIRLINE}`, borderRadius: 8, padding: '6px 14px', color: T.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>→</button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 4 }}>
+            {WEEK_LABELS.map(d => (
+              <div key={d} style={{ fontFamily: FONT_MONO, fontSize: 9, color: d === 'Dom' ? 'rgba(245,234,208,0.2)' : T.hint, textAlign: 'center', padding: '4px 0', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{d}</div>
+            ))}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+            {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
+            {Array.from({ length: daysInMonth }).map((_, i) => {
+              const day     = i + 1
+              const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+              const bks     = bookingsForDay(day)
+              const isToday = dateStr === todayStr
+              const isSel   = selDay === day
+              const hasPending = bks.some(b => b.status === 'pending')
+              return (
+                <div key={day}
+                  onClick={() => setSelDay(day === selDay ? null : day)}
+                  style={{ aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: 8, cursor: 'pointer', border: `1px solid ${isSel ? ACCENT : isToday ? 'rgba(235,188,99,0.3)' : 'transparent'}`, background: isSel ? ACCENT_DIM : 'transparent', transition: 'background 0.15s', userSelect: 'none' }}>
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 12, color: isSel ? ACCENT : isToday ? ACCENT : T.primary }}>{day}</span>
+                  {bks.length > 0 && (
+                    <div style={{ width: 5, height: 5, borderRadius: '50%', background: hasPending ? STATUS_COLOR.pending : STATUS_COLOR.confirmed, marginTop: 2 }} />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* painel lateral do dia selecionado */}
+        {selDay != null && (
+          <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+            <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15, color: T.primary, marginBottom: 16, textTransform: 'capitalize' }}>{fmtDateFull(selectedStr)}</p>
+            {dayBookings.length === 0 ? (
+              <p style={{ fontFamily: FONT, fontSize: 14, color: T.hint }}>Sem agendamentos neste dia.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {dayBookings.sort((a, b) => a.hour > b.hour ? 1 : -1).map(b => (
+                  <div key={b.id} style={{ padding: '12px 16px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontFamily: FONT_MONO, fontWeight: 600, fontSize: 14, color: ACCENT }}>{b.hour?.slice(0, 5)}</span>
+                      <Badge status={b.status} />
+                    </div>
+                    <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary }}>{b.client_name}</p>
+                    <p style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.muted, marginTop: 2 }}>{b.services?.name ?? '—'}</p>
+                    {b.status !== 'rejected' && (
+                      <div style={{ marginTop: 8 }}>
+                        <IconBtn danger onClick={() => updateStatus(b.id, 'rejected')}>Cancelar</IconBtn>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── seção relatórios ──────────────────────────────────────────────────────────
+function ReportsSection({ bookings }) {
+  const confirmed = bookings.filter(b => b.status === 'confirmed' || b.status === 'manual')
+  const monthPfx  = today().slice(0, 7)
+  const thisMonth = bookings.filter(b => b.date.startsWith(monthPfx))
+  const revenue   = confirmed.filter(b => b.date.startsWith(monthPfx)).reduce((sum, b) => sum + (b.services?.price_cents ?? 0), 0)
+
+  return (
+    <div>
+      <PageTitle>Relatórios</PageTitle>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
+        {[
+          ['Total este mês',        thisMonth.length,                                                      'agendamentos'],
+          ['Confirmados este mês',   confirmed.filter(b => b.date.startsWith(monthPfx)).length,            'agendamentos'],
+          ['Faturamento estimado',   fmtPrice(revenue),                                                    'este mês (confirmados)'],
+          ['Total geral',            bookings.filter(b => b.status === 'confirmed' || b.status === 'manual').length, 'agendamentos confirmados'],
+        ].map(([label, value, sub]) => (
+          <Card key={label}>
+            <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>{label}</p>
+            <p style={{ fontFamily: FONT_MONO, fontSize: 28, fontWeight: 600, color: ACCENT, marginBottom: 4 }}>{value}</p>
+            <p style={{ fontFamily: FONT, fontSize: 12, color: T.muted }}>{sub}</p>
+          </Card>
+        ))}
+      </div>
+      <p style={{ fontFamily: FONT, fontSize: 13, color: T.hint }}>Relatórios detalhados em breve.</p>
+    </div>
+  )
+}
+
+// ── seção configurações ───────────────────────────────────────────────────────
 function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServicesChange, onHoursChange, showToast }) {
   const [tab, setTab] = useState('profile')
 
@@ -99,7 +317,9 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
   }, [])
 
   useEffect(() => {
-    if (!profSlug || profSlug.length < 3 || profSlug === owner.slug) { setSlugStatus(profSlug === owner.slug ? 'same' : 'idle'); return }
+    if (!profSlug || profSlug.length < 3 || profSlug === owner.slug) {
+      setSlugStatus(profSlug === owner.slug ? 'same' : 'idle'); return
+    }
     setSlugStatus('checking')
     clearTimeout(slugTimer.current)
     slugTimer.current = setTimeout(async () => {
@@ -110,24 +330,21 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
   }, [profSlug, owner.slug, owner.id])
 
   async function saveProfile() {
-    if (!profName.trim()) return
-    if (slugStatus === 'taken') return
+    if (!profName.trim() || slugStatus === 'taken') return
     setProfSaving(true)
     const rawPhone = profWhatsapp.replace(/\D/g, '')
     const { data, error } = await supabase.from('owners')
-      .update({ name: profName.trim(), slug: profSlug, whatsapp: rawPhone })
-      .eq('id', owner.id)
-      .select()
-      .single()
+      .update({ name: profName.trim(), slug: slugify(profSlug), whatsapp: rawPhone })
+      .eq('id', owner.id).select().single()
     setProfSaving(false)
     if (error) { showToast('Erro ao salvar perfil.', 'error'); return }
     onOwnerUpdate(data)
     showToast('Perfil atualizado.')
   }
 
-  const clientUrl = `${CLIENT_APP_URL}/${profSlug || owner.slug}`
-  const slugHint = { idle: 'URL pública do app de agendamento.', same: clientUrl, checking: 'Verificando...', available: `✓ Disponível — ${clientUrl}`, taken: 'Slug já em uso.' }[slugStatus]
-  const slugError = slugStatus === 'taken' ? slugHint : ''
+  const clientUrl  = `${CLIENT_APP_URL}/${profSlug || owner.slug}`
+  const slugHint   = { idle: 'URL pública do app de agendamento.', same: clientUrl, checking: 'Verificando...', available: `✓ Disponível — ${clientUrl}`, taken: 'Slug já em uso.' }[slugStatus]
+  const slugError  = slugStatus === 'taken' ? slugHint : ''
   const profileValid = profName.trim().length >= 2 && profSlug.length >= 3 && slugStatus !== 'taken' && slugStatus !== 'checking'
 
   // ── serviços ───────────────────────────────────────────────────────────────
@@ -154,12 +371,9 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
       const { data, error } = await supabase.from('services').insert({ ...updated, owner_id: owner.id, sort_order: editIdx }).select().single()
       if (error) { showToast('Erro ao salvar serviço.', 'error'); setSvcSaving(false); return }
       const next = [...localSvcs]; next[editIdx] = data; setLocalSvcs(next)
-      onServicesChange()
-      setEditIdx(null); setSvcSaving(false); return
+      onServicesChange(); setEditIdx(null); setSvcSaving(false); return
     }
-    setSvcSaving(false)
-    onServicesChange()
-    setEditIdx(null)
+    setSvcSaving(false); onServicesChange(); setEditIdx(null)
     showToast('Serviço salvo.')
   }
 
@@ -172,8 +386,7 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
     }
     setLocalSvcs(s => s.filter((_, i) => i !== idx))
     if (editIdx === idx) setEditIdx(null)
-    onServicesChange()
-    showToast('Serviço removido.')
+    onServicesChange(); showToast('Serviço removido.')
   }
 
   function addService() {
@@ -193,15 +406,34 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
     setLocalHours(h => ({ ...h, [wd]: { ...h[wd], [field]: val } }))
   }
 
+  function addBlockedRange(wd) {
+    setLocalHours(h => ({ ...h, [wd]: { ...h[wd], blocked_ranges: [...(h[wd]?.blocked_ranges || []), { start: '', end: '' }] } }))
+  }
+
+  function removeBlockedRange(wd, idx) {
+    setLocalHours(h => ({ ...h, [wd]: { ...h[wd], blocked_ranges: (h[wd]?.blocked_ranges || []).filter((_, i) => i !== idx) } }))
+  }
+
+  function updateBlockedRange(wd, idx, field, val) {
+    setLocalHours(h => ({
+      ...h, [wd]: {
+        ...h[wd],
+        blocked_ranges: (h[wd]?.blocked_ranges || []).map((r, i) => i === idx ? { ...r, [field]: val } : r),
+      },
+    }))
+  }
+
   async function saveHours() {
     setHoursSaving(true)
     for (const [wd, cfg] of Object.entries(localHours)) {
+      const validRanges = (cfg.blocked_ranges || []).filter(r => r.start && r.end)
       const payload = {
-        open: cfg.open,
+        open:            cfg.open,
         morning_start:   cfg.open ? cfg.morning_start   || null : null,
         morning_end:     cfg.open ? cfg.morning_end     || null : null,
         afternoon_start: cfg.open ? cfg.afternoon_start || null : null,
         afternoon_end:   cfg.open ? cfg.afternoon_end   || null : null,
+        blocked_ranges:  cfg.open ? validRanges : [],
       }
       if (cfg.id) {
         await supabase.from('hours_config').update(payload).eq('id', cfg.id)
@@ -209,10 +441,10 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
         await supabase.from('hours_config').insert({ ...payload, owner_id: owner.id, weekday: parseInt(wd) })
       }
     }
-    setHoursSaving(false)
-    onHoursChange()
-    showToast('Horários salvos.')
+    setHoursSaving(false); onHoursChange(); showToast('Horários salvos.')
   }
+
+  const labelStyle = { fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }
 
   // ── render ─────────────────────────────────────────────────────────────────
   return (
@@ -223,52 +455,39 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
       {/* PERFIL */}
       {tab === 'profile' && (
         <div style={{ maxWidth: 480 }}>
-          {/* card: link do cliente */}
+          {/* card do link do cliente */}
           <div style={{ background: `${ACCENT}12`, border: `1px solid ${ACCENT}40`, borderRadius: RADIUS, padding: '16px 18px', marginBottom: 24 }}>
             <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: ACCENT, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>Link dos clientes</p>
             <p style={{ fontFamily: FONT, fontSize: 12, color: T.muted, marginBottom: 10 }}>Compartilhe este link para seus clientes fazerem agendamentos.</p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.primary, wordBreak: 'break-all', flex: 1 }}>{clientUrl}</span>
-              <button
-                onClick={() => navigator.clipboard?.writeText(clientUrl).then(() => showToast('Link copiado.'))}
-                style={{ background: ACCENT, border: 'none', borderRadius: RADIUS - 4, padding: '7px 14px', color: INK, fontFamily: FONT_MONO, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
-              >
+              <button onClick={() => navigator.clipboard?.writeText(clientUrl).then(() => showToast('Link copiado.'))}
+                style={{ background: ACCENT, border: 'none', borderRadius: RADIUS - 4, padding: '7px 14px', color: INK, fontFamily: FONT_MONO, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
                 Copiar
               </button>
               <a href={clientUrl} target="_blank" rel="noreferrer"
-                style={{ background: 'transparent', border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS - 4, padding: '6px 12px', color: T.muted, fontFamily: FONT_MONO, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, textDecoration: 'none' }}
-              >
+                style={{ border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS - 4, padding: '6px 12px', color: T.muted, fontFamily: FONT_MONO, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, textDecoration: 'none' }}>
                 Abrir
               </a>
             </div>
           </div>
 
           <Input label="Nome da barbearia" value={profName} onChange={e => setProfName(e.target.value)} placeholder="Barbearia do João" />
-          <Input
-            label="Slug (URL)"
-            value={profSlug}
-            onChange={e => setProfSlug(slugify(e.target.value))}
+          <Input label="Slug (URL)" value={profSlug}
+            onChange={e => setProfSlug(softSlugify(e.target.value))}
+            onBlur={e => setProfSlug(slugify(e.target.value))}
             placeholder="joao-barbearia"
-            hint={!slugError ? slugHint : ''}
-            error={slugError}
-          />
+            hint={!slugError ? slugHint : ''} error={slugError} />
           {authEmail && (
             <div style={{ marginBottom: 16 }}>
               <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>E-mail da conta</p>
-              <div style={{ padding: '11px 14px', background: 'rgba(255,255,255,0.04)', border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, fontFamily: FONT, fontSize: 14, color: T.muted }}>
-                {authEmail}
-              </div>
+              <div style={{ padding: '11px 14px', background: 'rgba(255,255,255,0.04)', border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, fontFamily: FONT, fontSize: 14, color: T.muted }}>{authEmail}</div>
             </div>
           )}
-          <Input
-            label="WhatsApp"
-            placeholder="(XX) XXXXX-XXXX"
-            value={profWhatsapp}
-            onChange={e => setProfWhatsapp(formatPhone(e.target.value))}
-            inputMode="numeric"
-            hint="Número para receber notificações de agendamento."
-          />
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+          <Input label="WhatsApp" placeholder="(XX) XXXXX-XXXX" value={profWhatsapp}
+            onChange={e => setProfWhatsapp(formatPhone(e.target.value))} inputMode="numeric"
+            hint="Número para receber notificações de agendamento." />
+          <div style={{ marginBottom: 16 }}>
             <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint }}>Plano: <span style={{ color: ACCENT }}>{owner.plan}</span></p>
           </div>
           <Divider style={{ margin: '20px 0' }} />
@@ -315,10 +534,11 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
 
       {/* HORÁRIOS */}
       {tab === 'hours' && (
-        <div style={{ maxWidth: 560 }}>
+        <div style={{ maxWidth: 600 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 24 }}>
             {DIAS.map((dia, wd) => {
-              const cfg = localHours[wd] || { open: false, morning_start: '', morning_end: '', afternoon_start: '', afternoon_end: '' }
+              const cfg    = localHours[wd] || { open: false, morning_start: '', morning_end: '', afternoon_start: '', afternoon_end: '', blocked_ranges: [] }
+              const blocks = cfg.blocked_ranges || []
               return (
                 <div key={wd} style={{ background: INK2, border: `1px solid ${cfg.open ? HAIRLINE : 'transparent'}`, borderRadius: RADIUS, overflow: 'hidden', transition: 'border-color 0.2s' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}>
@@ -329,10 +549,10 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
                     </div>
                   </div>
                   {cfg.open && (
-                    <div style={{ padding: '0 16px 14px', borderTop: `1px solid ${HAIRLINE}` }}>
+                    <div style={{ padding: '0 16px 16px', borderTop: `1px solid ${HAIRLINE}` }}>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 12 }}>
                         <div>
-                          <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>Manhã</p>
+                          <p style={labelStyle}>Manhã</p>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <TimeSelect value={cfg.morning_start} onChange={v => setHourField(wd, 'morning_start', v)} placeholder="início" />
                             <span style={{ color: T.hint, fontSize: 12, flexShrink: 0 }}>→</span>
@@ -340,7 +560,7 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
                           </div>
                         </div>
                         <div>
-                          <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>Tarde</p>
+                          <p style={labelStyle}>Tarde</p>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <TimeSelect value={cfg.afternoon_start} onChange={v => setHourField(wd, 'afternoon_start', v)} placeholder="início" />
                             <span style={{ color: T.hint, fontSize: 12, flexShrink: 0 }}>→</span>
@@ -348,6 +568,34 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
                           </div>
                         </div>
                       </div>
+
+                      {/* bloqueios */}
+                      {blocks.length > 0 && (
+                        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px dashed ${HAIRLINE}` }}>
+                          <p style={{ ...labelStyle, marginBottom: 10, color: '#F87171' }}>Períodos bloqueados</p>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {blocks.map((range, ri) => (
+                              <div key={ri} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <div style={{ flex: 1 }}>
+                                  <TimeSelect value={range.start} onChange={v => updateBlockedRange(wd, ri, 'start', v)} placeholder="início" />
+                                </div>
+                                <span style={{ color: T.hint, fontSize: 12, flexShrink: 0 }}>→</span>
+                                <div style={{ flex: 1 }}>
+                                  <TimeSelect value={range.end} onChange={v => updateBlockedRange(wd, ri, 'end', v)} placeholder="fim" />
+                                </div>
+                                <button onClick={() => removeBlockedRange(wd, ri)}
+                                  style={{ background: 'transparent', border: `1px solid rgba(248,113,113,0.3)`, borderRadius: 6, width: 28, height: 28, cursor: 'pointer', color: '#F87171', fontSize: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <button onClick={() => addBlockedRange(wd)}
+                        style={{ marginTop: 12, background: 'transparent', border: `1px dashed rgba(248,113,113,0.4)`, borderRadius: 8, padding: '6px 14px', color: '#F87171', fontFamily: FONT_MONO, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer' }}>
+                        + Bloquear período
+                      </button>
                     </div>
                   )}
                 </div>
@@ -383,7 +631,6 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
     onOwnerUpdate(updated)
   }
 
-  // ── carregar dados ─────────────────────────────────────────────────────────
   const loadBookings = useCallback(async () => {
     const { data } = await supabase.from('bookings')
       .select('*, services(name, price_cents, duration_min)')
@@ -413,11 +660,10 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
     return () => supabase.removeChannel(channel)
   }, [loadBookings, loadServices, loadHours])
 
-  // ── ações de booking ───────────────────────────────────────────────────────
   async function updateStatus(id, status) {
     const { error } = await supabase.from('bookings').update({ status }).eq('id', id)
-    if (error) { showToast('Erro ao atualizar status.', 'error'); return }
-    showToast(status === 'confirmed' ? 'Agendamento confirmado.' : 'Agendamento recusado.')
+    if (error) { showToast('Erro ao atualizar.', 'error'); return }
+    showToast(status === 'rejected' ? 'Agendamento cancelado.' : 'Status atualizado.')
     loadBookings()
   }
 
@@ -438,7 +684,8 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
         {NAV.map(item => {
           const active = section === item.key
           return (
-            <button key={item.key} onClick={() => setSection(item.key)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: RADIUS, border: 'none', cursor: 'pointer', background: active ? ACCENT_DIM : 'transparent', color: active ? ACCENT : T.muted, fontFamily: FONT, fontWeight: active ? 600 : 400, fontSize: 14, marginBottom: 2, transition: 'background 0.15s, color 0.15s', textAlign: 'left' }}>
+            <button key={item.key} onClick={() => setSection(item.key)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: RADIUS, border: 'none', cursor: 'pointer', background: active ? ACCENT_DIM : 'transparent', color: active ? ACCENT : T.muted, fontFamily: FONT, fontWeight: active ? 600 : 400, fontSize: 14, marginBottom: 2, transition: 'background 0.15s, color 0.15s', textAlign: 'left' }}>
               <span style={{ fontFamily: FONT_MONO, fontSize: 14, width: 18, textAlign: 'center' }}>{item.icon}</span>
               {item.label}
             </button>
@@ -451,11 +698,9 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
         {owner.slug && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
             <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>/{owner.slug}</p>
-            <button
-              title="Copiar link dos clientes"
+            <button title="Copiar link dos clientes"
               onClick={() => navigator.clipboard?.writeText(`${CLIENT_APP_URL}/${owner.slug}`).then(() => showToast('Link copiado.'))}
-              style={{ background: 'transparent', border: `1px solid ${HAIRLINE}`, borderRadius: 6, padding: '3px 8px', color: ACCENT, fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer', flexShrink: 0 }}
-            >
+              style={{ background: 'transparent', border: `1px solid ${HAIRLINE}`, borderRadius: 6, padding: '3px 8px', color: ACCENT, fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer', flexShrink: 0 }}>
               copiar link
             </button>
           </div>
@@ -465,236 +710,24 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
     </div>
   )
 
-  // ── seção: agendamentos ────────────────────────────────────────────────────
-  function BookingsSection() {
-    const [filterDate,   setFilterDate]   = useState(today())
-    const [filterStatus, setFilterStatus] = useState('all')
-    const [detail,       setDetail]       = useState(null)
-
-    const filtered = bookings.filter(b => {
-      const matchDate   = !filterDate || b.date === filterDate
-      const matchStatus = filterStatus === 'all' || b.status === filterStatus
-      return matchDate && matchStatus
-    })
-
-    return (
-      <div>
-        <PageTitle>Agendamentos</PageTitle>
-        <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div>
-            <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Data</p>
-            <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={{ padding: '10px 12px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, color: T.primary, fontFamily: FONT_MONO, fontSize: 13, colorScheme: 'dark', cursor: 'pointer' }} />
-          </div>
-          <div>
-            <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Status</p>
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ padding: '10px 12px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, color: T.primary, fontFamily: FONT, fontSize: 13, cursor: 'pointer' }}>
-              <option value="all">Todos</option>
-              <option value="pending">Pendente</option>
-              <option value="confirmed">Confirmado</option>
-              <option value="rejected">Recusado</option>
-              <option value="manual">Manual</option>
-            </select>
-          </div>
-          <GhostBtn onClick={() => { setFilterDate(''); setFilterStatus('all') }}>Limpar filtros</GhostBtn>
-        </div>
-
-        {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner /></div>
-        ) : filtered.length === 0 ? (
-          <p style={{ fontFamily: FONT, fontSize: 14, color: T.hint, padding: '40px 0', textAlign: 'center' }}>Nenhum agendamento encontrado.</p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {filtered.map(b => (
-              <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 18px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, cursor: 'pointer' }} onClick={() => setDetail(b)}>
-                <div style={{ fontFamily: FONT_MONO, fontSize: 16, fontWeight: 600, color: ACCENT, minWidth: 48 }}>{b.hour?.slice(0, 5)}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary, marginBottom: 2 }}>{b.client_name}</p>
-                  <p style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.muted }}>{b.services?.name ?? '—'} · {new Date(b.date + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
-                </div>
-                <Badge status={b.status} />
-                {b.status === 'pending' && (
-                  <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
-                    <IconBtn onClick={() => updateStatus(b.id, 'confirmed')}>✓ Confirmar</IconBtn>
-                    <IconBtn onClick={() => updateStatus(b.id, 'rejected')} danger>✕ Recusar</IconBtn>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {detail && (
-          <Modal onClose={() => setDetail(null)}>
-            <Card>
-              <Eyebrow>Agendamento · {detail.code}</Eyebrow>
-              <h3 style={{ fontFamily: FONT, fontSize: 20, fontWeight: 700, color: T.primary, marginBottom: 20 }}>{detail.client_name}</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-                {[
-                  ['Serviço',  detail.services?.name ?? '—'],
-                  ['Data',     fmtDateFull(detail.date)],
-                  ['Horário',  detail.hour?.slice(0, 5)],
-                  ['Telefone', detail.client_phone],
-                  ['Status',   <Badge key="s" status={detail.status} />],
-                  detail.notes && ['Obs.', detail.notes],
-                ].filter(Boolean).map(([label, value]) => (
-                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
-                    <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</span>
-                    <span style={{ fontFamily: FONT, fontSize: 14, color: T.primary }}>{value}</span>
-                  </div>
-                ))}
-              </div>
-              <Divider />
-              <div style={{ display: 'flex', gap: 8 }}>
-                {detail.status === 'pending' && <>
-                  <SecBtn onClick={() => { updateStatus(detail.id, 'rejected'); setDetail(null) }} style={{ flex: 1 }}>Recusar</SecBtn>
-                  <PrimaryBtn onClick={() => { updateStatus(detail.id, 'confirmed'); setDetail(null) }} style={{ flex: 2 }}>Confirmar</PrimaryBtn>
-                </>}
-                {detail.status !== 'pending' && (
-                  <IconBtn danger onClick={() => { deleteBooking(detail.id); setDetail(null) }}>Remover agendamento</IconBtn>
-                )}
-              </div>
-            </Card>
-          </Modal>
-        )}
-      </div>
-    )
-  }
-
-  // ── seção: calendário ──────────────────────────────────────────────────────
-  function CalendarSection() {
-    const now = new Date()
-    const [calYear,  setCalYear]  = useState(now.getFullYear())
-    const [calMonth, setCalMonth] = useState(now.getMonth())
-    const [selDay,   setSelDay]   = useState(null)
-
-    const daysInMonth = getDaysInMonth(calYear, calMonth)
-    const firstDay    = getFirstDay(calYear, calMonth)
-    const monthDate   = new Date(calYear, calMonth, 1)
-
-    function prevMonth() { if (calMonth===0){setCalYear(y=>y-1);setCalMonth(11)}else setCalMonth(m=>m-1); setSelDay(null) }
-    function nextMonth() { if (calMonth===11){setCalYear(y=>y+1);setCalMonth(0)}else setCalMonth(m=>m+1); setSelDay(null) }
-
-    function bookingsForDate(day) {
-      const d = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
-      return bookings.filter(b => b.date === d)
-    }
-
-    const selectedStr  = selDay ? `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(selDay).padStart(2,'0')}` : null
-    const dayBookings  = selectedStr ? bookings.filter(b => b.date === selectedStr) : []
-
-    return (
-      <div>
-        <PageTitle>Calendário</PageTitle>
-        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-          <div style={{ flex: '1 1 360px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <button onClick={prevMonth} style={{ background: 'none', border: `1px solid ${HAIRLINE}`, borderRadius: 8, padding: '6px 12px', color: T.muted, cursor: 'pointer' }}>←</button>
-              <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15, color: T.primary, textTransform: 'capitalize' }}>{fmtMonthYear(monthDate)}</p>
-              <button onClick={nextMonth} style={{ background: 'none', border: `1px solid ${HAIRLINE}`, borderRadius: 8, padding: '6px 12px', color: T.muted, cursor: 'pointer' }}>→</button>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 8 }}>
-              {['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d => (
-                <div key={d} style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textAlign: 'center', padding: '4px 0', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{d}</div>
-              ))}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-              {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
-              {Array.from({ length: daysInMonth }).map((_, i) => {
-                const day = i + 1
-                const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
-                const bks = bookingsForDate(day)
-                const isToday   = dateStr === today()
-                const isSel     = selDay === day
-                const hasPending = bks.some(b => b.status === 'pending')
-                return (
-                  <div key={day} onClick={() => setSelDay(day === selDay ? null : day)} style={{ aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: 10, cursor: 'pointer', border: `1px solid ${isSel ? ACCENT : isToday ? 'rgba(235,188,99,0.3)' : 'transparent'}`, background: isSel ? ACCENT_DIM : 'transparent', transition: 'background 0.15s' }}>
-                    <span style={{ fontFamily: FONT_MONO, fontSize: 13, color: isSel ? ACCENT : isToday ? ACCENT : T.primary }}>{day}</span>
-                    {bks.length > 0 && <div style={{ width: 6, height: 6, borderRadius: '50%', background: hasPending ? STATUS_COLOR.pending : STATUS_COLOR.confirmed, marginTop: 2 }} />}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          {selDay && (
-            <div style={{ flex: '1 1 300px' }}>
-              <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15, color: T.primary, marginBottom: 16, textTransform: 'capitalize' }}>{fmtDateFull(selectedStr)}</p>
-              {dayBookings.length === 0 ? (
-                <p style={{ fontFamily: FONT, fontSize: 14, color: T.hint }}>Sem agendamentos neste dia.</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {dayBookings.map(b => (
-                    <div key={b.id} style={{ padding: '12px 16px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                        <span style={{ fontFamily: FONT_MONO, fontWeight: 600, fontSize: 14, color: ACCENT }}>{b.hour?.slice(0, 5)}</span>
-                        <Badge status={b.status} />
-                      </div>
-                      <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary }}>{b.client_name}</p>
-                      <p style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.muted, marginTop: 2 }}>{b.services?.name ?? '—'}</p>
-                      {b.status === 'pending' && (
-                        <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-                          <IconBtn onClick={() => updateStatus(b.id, 'confirmed')}>✓</IconBtn>
-                          <IconBtn onClick={() => updateStatus(b.id, 'rejected')} danger>✕</IconBtn>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  // ── seção: relatórios ──────────────────────────────────────────────────────
-  function ReportsSection() {
-    const confirmed = bookings.filter(b => b.status === 'confirmed' || b.status === 'manual')
-    const pending   = bookings.filter(b => b.status === 'pending')
-    const monthPfx  = today().slice(0, 7)
-    const thisMonth = bookings.filter(b => b.date.startsWith(monthPfx))
-    const revenue   = confirmed.filter(b => b.date.startsWith(monthPfx)).reduce((sum, b) => sum + (b.services?.price_cents ?? 0), 0)
-
-    return (
-      <div>
-        <PageTitle>Relatórios</PageTitle>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
-          {[
-            ['Total este mês', thisMonth.length, 'agendamentos'],
-            ['Confirmados este mês', confirmed.filter(b => b.date.startsWith(monthPfx)).length, 'agendamentos'],
-            ['Pendentes', pending.length, 'aguardando confirmação'],
-            ['Faturamento estimado', fmtPrice(revenue), 'este mês (confirmados)'],
-          ].map(([label, value, sub]) => (
-            <Card key={label}>
-              <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>{label}</p>
-              <p style={{ fontFamily: FONT_MONO, fontSize: 28, fontWeight: 600, color: ACCENT, marginBottom: 4 }}>{value}</p>
-              <p style={{ fontFamily: FONT, fontSize: 12, color: T.muted }}>{sub}</p>
-            </Card>
-          ))}
-        </div>
-        <p style={{ fontFamily: FONT, fontSize: 13, color: T.hint }}>Relatórios detalhados em breve.</p>
-      </div>
-    )
-  }
-
-  // ── render ─────────────────────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       {Sidebar}
       <main style={{ flex: 1, padding: '32px 36px', overflowY: 'auto', maxWidth: 900 }}>
-        {section === 'bookings'  && <BookingsSection />}
-        {section === 'calendar'  && <CalendarSection />}
-        {section === 'reports'   && <ReportsSection />}
-        {section === 'settings'  && (
+        {section === 'bookings' && (
+          <BookingsSection bookings={bookings} loading={loading} updateStatus={updateStatus} deleteBooking={deleteBooking} />
+        )}
+        {section === 'calendar' && (
+          <CalendarSection bookings={bookings} updateStatus={updateStatus} />
+        )}
+        {section === 'reports' && (
+          <ReportsSection bookings={bookings} />
+        )}
+        {section === 'settings' && (
           <SettingsSection
-            owner={owner}
-            services={services}
-            hoursConfig={hoursConfig}
-            onOwnerUpdate={handleOwnerUpdate}
-            onServicesChange={loadServices}
-            onHoursChange={loadHours}
-            showToast={showToast}
+            owner={owner} services={services} hoursConfig={hoursConfig}
+            onOwnerUpdate={handleOwnerUpdate} onServicesChange={loadServices}
+            onHoursChange={loadHours} showToast={showToast}
           />
         )}
       </main>
