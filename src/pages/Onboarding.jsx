@@ -1,0 +1,320 @@
+import { useState, useEffect, useRef } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { NavalhaLogo, Eyebrow, PrimaryBtn, SecBtn, GhostBtn, Input, Card, IconBtn } from '../components/ui.jsx'
+import { FONT, FONT_MONO, T, ACCENT, HAIRLINE, INK, INK2, RADIUS } from '../tokens.js'
+
+const DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+
+const DEFAULT_SERVICES = [
+  { name: 'Corte', price_cents: 4000, duration_min: 30 },
+  { name: 'Barba', price_cents: 2500, duration_min: 20 },
+  { name: 'Corte + Barba', price_cents: 6000, duration_min: 45 },
+]
+
+const DEFAULT_HOURS = {
+  0: { open: false, morning_start: '', morning_end: '', afternoon_start: '', afternoon_end: '' },
+  1: { open: true, morning_start: '09:00', morning_end: '11:30', afternoon_start: '13:30', afternoon_end: '19:30' },
+  2: { open: true, morning_start: '09:00', morning_end: '11:30', afternoon_start: '13:30', afternoon_end: '19:30' },
+  3: { open: true, morning_start: '09:00', morning_end: '11:30', afternoon_start: '13:30', afternoon_end: '19:30' },
+  4: { open: true, morning_start: '09:00', morning_end: '11:30', afternoon_start: '13:30', afternoon_end: '19:30' },
+  5: { open: true, morning_start: '09:00', morning_end: '11:30', afternoon_start: '13:30', afternoon_end: '19:30' },
+  6: { open: true, morning_start: '09:00', morning_end: '11:30', afternoon_start: '13:30', afternoon_end: '19:30' },
+}
+
+// slots de 30 em 30 min das 06:00 às 23:00
+const TIME_SLOTS = Array.from({ length: 35 }, (_, i) => {
+  const total = 360 + i * 30 // começa em 06:00
+  const h = String(Math.floor(total / 60)).padStart(2, '0')
+  const m = String(total % 60).padStart(2, '0')
+  return `${h}:${m}`
+})
+
+function slugify(v) {
+  return v.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/^-+|-+$/g, '')
+}
+function centsToReal(cents) { return (cents / 100).toFixed(2).replace('.', ',') }
+function realToCents(v) { return Math.round(parseFloat(v.replace(',', '.')) * 100) || 0 }
+
+// ── select de horário customizado ─────────────────────────────────────────────
+function TimeSelect({ value, onChange, placeholder = '—' }) {
+  return (
+    <select
+      value={value || ''}
+      onChange={e => onChange(e.target.value)}
+      style={{
+        width: '100%', padding: '9px 10px', background: INK,
+        border: `1px solid ${HAIRLINE}`, borderRadius: 8,
+        color: value ? T.primary : T.hint,
+        fontFamily: FONT_MONO, fontSize: 13, cursor: 'pointer',
+        appearance: 'none', WebkitAppearance: 'none',
+      }}
+    >
+      <option value="" disabled>{placeholder}</option>
+      {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+    </select>
+  )
+}
+
+// ── toggle switch ─────────────────────────────────────────────────────────────
+function Toggle({ on, onChange }) {
+  return (
+    <div onClick={() => onChange(!on)} style={{ width: 38, height: 22, borderRadius: 11, cursor: 'pointer', transition: 'background 0.2s', background: on ? ACCENT : 'rgba(235,188,99,0.15)', position: 'relative', flexShrink: 0 }}>
+      <div style={{ position: 'absolute', top: 3, left: on ? 19 : 3, width: 16, height: 16, borderRadius: '50%', background: on ? INK : T.hint, transition: 'left 0.2s' }} />
+    </div>
+  )
+}
+
+export default function Onboarding({ owner, onComplete }) {
+  const [step, setStep]     = useState(1)
+  const [saving, setSaving] = useState(false)
+  const [error, setError]   = useState('')
+
+  // step 1
+  const [barbName, setBarbName] = useState(owner.name || '')
+  const [slug, setSlug]         = useState(owner.slug || '')
+  const [whatsapp, setWhatsapp] = useState(owner.whatsapp || '')
+  const [apikey, setApikey]     = useState(owner.callmebot_apikey || '')
+  const [slugStatus, setSlugStatus] = useState('idle')
+  const slugTimer = useRef(null)
+
+  // step 2
+  const [services, setServices] = useState(DEFAULT_SERVICES.map(s => ({ ...s, _id: Math.random() })))
+  const [editIdx, setEditIdx]   = useState(null)
+  const [editForm, setEditForm] = useState({})
+
+  // step 3
+  const [hours, setHours] = useState(DEFAULT_HOURS)
+
+  // ── validação de slug ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!slug || slug.length < 3) { setSlugStatus('idle'); return }
+    setSlugStatus('checking')
+    clearTimeout(slugTimer.current)
+    slugTimer.current = setTimeout(async () => {
+      const { data } = await supabase.from('owners').select('id').eq('slug', slug).neq('id', owner.id).maybeSingle()
+      setSlugStatus(data ? 'taken' : 'available')
+    }, 500)
+    return () => clearTimeout(slugTimer.current)
+  }, [slug, owner.id])
+
+  // ── salvar tudo ──────────────────────────────────────────────────────────────
+  async function handleComplete() {
+    setError('')
+    setSaving(true)
+    try {
+      const { error: e1 } = await supabase.from('owners').update({
+        name: barbName.trim(), slug, whatsapp: whatsapp.trim(), callmebot_apikey: apikey.trim(), active: true,
+      }).eq('id', owner.id)
+      if (e1) throw e1
+
+      const svcs = services.map(({ name, price_cents, duration_min }, i) => ({
+        owner_id: owner.id, name, price_cents, duration_min, sort_order: i,
+      }))
+      const { error: e2 } = await supabase.from('services').insert(svcs)
+      if (e2) throw e2
+
+      const hrs = Object.entries(hours).map(([wd, cfg]) => ({
+        owner_id: owner.id, weekday: parseInt(wd), open: cfg.open,
+        morning_start:    cfg.open ? cfg.morning_start    || null : null,
+        morning_end:      cfg.open ? cfg.morning_end      || null : null,
+        afternoon_start:  cfg.open ? cfg.afternoon_start  || null : null,
+        afternoon_end:    cfg.open ? cfg.afternoon_end    || null : null,
+      }))
+      const { error: e3 } = await supabase.from('hours_config').insert(hrs)
+      if (e3) throw e3
+
+      onComplete({ ...owner, name: barbName.trim(), slug, whatsapp, callmebot_apikey: apikey })
+    } catch (err) {
+      setError(err.message || 'Erro ao salvar. Tente novamente.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ── helpers step 2 ───────────────────────────────────────────────────────────
+  function startEdit(idx) {
+    setEditIdx(idx)
+    setEditForm({ ...services[idx], priceDisplay: centsToReal(services[idx].price_cents) })
+  }
+
+  function saveEdit() {
+    const updated = [...services]
+    updated[editIdx] = { _id: editForm._id, name: editForm.name, duration_min: editForm.duration_min, price_cents: realToCents(editForm.priceDisplay) }
+    setServices(updated)
+    setEditIdx(null)
+  }
+
+  function addService() {
+    const newSvc = { name: '', price_cents: 0, duration_min: 30, _id: Math.random() }
+    setServices(s => [...s, newSvc])
+    setEditIdx(services.length)
+    setEditForm({ ...newSvc, priceDisplay: '0,00' })
+  }
+
+  function removeService(idx) {
+    setServices(s => s.filter((_, i) => i !== idx))
+    if (editIdx === idx) setEditIdx(null)
+  }
+
+  function setHourField(wd, field, val) {
+    setHours(h => ({ ...h, [wd]: { ...h[wd], [field]: val } }))
+  }
+
+  // ── barra de progresso ───────────────────────────────────────────────────────
+  const progress = (
+    <div style={{ display: 'flex', gap: 6, marginBottom: 32 }}>
+      {[1, 2, 3].map(n => (
+        <div key={n} style={{ flex: 1, height: 3, borderRadius: 2, background: n <= step ? ACCENT : HAIRLINE, transition: 'background 0.3s' }} />
+      ))}
+    </div>
+  )
+
+  // ── step 1 ───────────────────────────────────────────────────────────────────
+  const slugHint = {
+    idle:      slug.length > 0 && slug.length < 3 ? 'Mínimo 3 caracteres.' : 'Esta será a URL pública do seu app de agendamento.',
+    checking:  'Verificando disponibilidade...',
+    available: `✓ Disponível — navalha.app/${slug}`,
+    taken:     'Este slug já está em uso. Escolha outro.',
+  }[slugStatus]
+
+  const step1Valid = barbName.trim().length >= 2 && slug.length >= 3 && slugStatus === 'available'
+
+  const renderStep1 = (
+    <>
+      <Eyebrow>Passo 1 de 3</Eyebrow>
+      <h2 style={{ fontFamily: FONT, fontSize: 22, fontWeight: 700, color: T.primary, marginBottom: 24, letterSpacing: '-0.02em' }}>Dados da barbearia.</h2>
+      <Input label="Nome da barbearia" placeholder="Barbearia do João" value={barbName} onChange={e => setBarbName(e.target.value)} />
+      <Input
+        label="Slug (URL)"
+        placeholder="joao-barbearia"
+        value={slug}
+        onChange={e => setSlug(slugify(e.target.value))}
+        error={slugStatus === 'taken' ? slugHint : ''}
+        hint={slugStatus !== 'taken' ? slugHint : ''}
+      />
+      <Input label="WhatsApp" placeholder="5551999999999" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} hint="Com código do país. Ex: 5551999999999" />
+      <Input label="API Key CallMeBot" placeholder="123456" value={apikey} onChange={e => setApikey(e.target.value)} hint="Opcional — notificações no WhatsApp." />
+      <PrimaryBtn disabled={!step1Valid} onClick={() => setStep(2)}>Continuar</PrimaryBtn>
+    </>
+  )
+
+  // ── step 2 ───────────────────────────────────────────────────────────────────
+  const renderStep2 = (
+    <>
+      <Eyebrow>Passo 2 de 3</Eyebrow>
+      <h2 style={{ fontFamily: FONT, fontSize: 22, fontWeight: 700, color: T.primary, marginBottom: 24, letterSpacing: '-0.02em' }}>Serviços.</h2>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+        {services.map((svc, idx) => (
+          <div key={svc._id}>
+            {editIdx === idx ? (
+              <Card style={{ padding: 16 }}>
+                <Input label="Nome" placeholder="Corte" value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <Input label="Preço (R$)" placeholder="40,00" value={editForm.priceDisplay} onChange={e => setEditForm(f => ({ ...f, priceDisplay: e.target.value }))} />
+                  <Input label="Duração (min)" type="number" placeholder="30" value={editForm.duration_min} onChange={e => setEditForm(f => ({ ...f, duration_min: parseInt(e.target.value) || 0 }))} />
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <SecBtn onClick={() => setEditIdx(null)} style={{ flex: 1 }}>Cancelar</SecBtn>
+                  <PrimaryBtn onClick={saveEdit} disabled={!editForm.name.trim()} style={{ flex: 2 }}>Salvar</PrimaryBtn>
+                </div>
+              </Card>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS }}>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary }}>{svc.name || '(sem nome)'}</p>
+                  <p style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.muted, marginTop: 2 }}>R$ {centsToReal(svc.price_cents)} · {svc.duration_min}min</p>
+                </div>
+                <IconBtn onClick={() => startEdit(idx)}>editar</IconBtn>
+                <IconBtn onClick={() => removeService(idx)} danger>×</IconBtn>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <GhostBtn onClick={addService} style={{ marginBottom: 24, color: ACCENT }}>+ Adicionar serviço</GhostBtn>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <SecBtn onClick={() => setStep(1)} style={{ flex: 1 }}>Voltar</SecBtn>
+        <PrimaryBtn disabled={services.length === 0 || editIdx !== null} onClick={() => setStep(3)} style={{ flex: 2 }}>Continuar</PrimaryBtn>
+      </div>
+    </>
+  )
+
+  // ── step 3 ───────────────────────────────────────────────────────────────────
+  const renderStep3 = (
+    <>
+      <Eyebrow>Passo 3 de 3</Eyebrow>
+      <h2 style={{ fontFamily: FONT, fontSize: 22, fontWeight: 700, color: T.primary, marginBottom: 8, letterSpacing: '-0.02em' }}>Horários.</h2>
+      <p style={{ fontFamily: FONT, fontSize: 13, color: T.hint, marginBottom: 24 }}>Configure os horários de funcionamento por dia da semana.</p>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 24 }}>
+        {DIAS.map((dia, wd) => {
+          const cfg = hours[wd]
+          return (
+            <div key={wd} style={{ background: INK2, border: `1px solid ${cfg.open ? HAIRLINE : 'transparent'}`, borderRadius: RADIUS, overflow: 'hidden', transition: 'border-color 0.2s' }}>
+              {/* cabeçalho do dia */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}>
+                <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: cfg.open ? T.primary : T.hint }}>{dia}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: cfg.open ? ACCENT : T.hint, transition: 'color 0.2s' }}>
+                    {cfg.open ? 'Aberto' : 'Fechado'}
+                  </span>
+                  <Toggle on={cfg.open} onChange={v => setHourField(wd, 'open', v)} />
+                </div>
+              </div>
+
+              {/* horários — expandem quando aberto */}
+              {cfg.open && (
+                <div style={{ padding: '0 16px 14px', borderTop: `1px solid ${HAIRLINE}` }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 12 }}>
+                    {/* manhã */}
+                    <div>
+                      <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>Manhã</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <TimeSelect value={cfg.morning_start} onChange={v => setHourField(wd, 'morning_start', v)} placeholder="início" />
+                        <span style={{ color: T.hint, fontSize: 12, flexShrink: 0 }}>→</span>
+                        <TimeSelect value={cfg.morning_end} onChange={v => setHourField(wd, 'morning_end', v)} placeholder="fim" />
+                      </div>
+                    </div>
+                    {/* tarde */}
+                    <div>
+                      <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>Tarde</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <TimeSelect value={cfg.afternoon_start} onChange={v => setHourField(wd, 'afternoon_start', v)} placeholder="início" />
+                        <span style={{ color: T.hint, fontSize: 12, flexShrink: 0 }}>→</span>
+                        <TimeSelect value={cfg.afternoon_end} onChange={v => setHourField(wd, 'afternoon_end', v)} placeholder="fim" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {error && <p style={{ fontFamily: FONT, fontSize: 13, color: '#F87171', marginBottom: 16 }}>{error}</p>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <SecBtn onClick={() => setStep(2)} style={{ flex: 1 }}>Voltar</SecBtn>
+        <PrimaryBtn disabled={saving} onClick={handleComplete} style={{ flex: 2 }}>
+          {saving ? 'Salvando...' : 'Concluir configuração'}
+        </PrimaryBtn>
+      </div>
+    </>
+  )
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ width: '100%', maxWidth: 520 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 40 }}>
+          <NavalhaLogo size={36} />
+        </div>
+        <Card>
+          {progress}
+          {step === 1 && renderStep1}
+          {step === 2 && renderStep2}
+          {step === 3 && renderStep3}
+        </Card>
+      </div>
+    </div>
+  )
+}

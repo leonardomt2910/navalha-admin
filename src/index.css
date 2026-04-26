@@ -1,0 +1,13 @@
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; padding: 0; }
+
+body {
+  background: #110C08;
+  color: #F5EAD0;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+input, button, select, textarea { font: inherit; }
+a { color: inherit; text-decoration: none; }
