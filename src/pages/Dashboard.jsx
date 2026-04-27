@@ -719,7 +719,7 @@ function CalendarSection({ bookings, updateStatus, onRefresh }) {
                 </div>
 
                 {/* lista de agendamentos — scroll se muitos */}
-                <div style={{ padding: '8px 6px', overflowY: 'auto', maxHeight: 380, flex: 1 }}>
+                <div style={{ padding: '8px 6px', overflowY: 'auto', maxHeight: 'calc(100vh - 260px)', flex: 1 }}>
                   {bks.length === 0 ? (
                     <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: 'rgba(245,234,208,0.18)', textAlign: 'center', padding: '14px 0' }}>—</p>
                   ) : (
@@ -1244,7 +1244,7 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
     <div style={{ display: 'flex', minHeight: '100vh', flexDirection: isMobile ? 'column' : 'row' }}>
       {!isMobile && Sidebar}
       {TopBar}
-      <main style={{ flex: 1, padding: isMobile ? '20px 16px' : '32px 36px', overflowY: 'auto', maxWidth: isMobile ? undefined : 900, paddingBottom: isMobile ? 80 : 32 }}>
+      <main style={{ flex: 1, padding: isMobile ? '20px 16px' : '32px 36px', overflowY: 'auto', maxWidth: isMobile ? undefined : section === 'calendar' ? undefined : 900, paddingBottom: isMobile ? 80 : 32 }}>
         {section === 'bookings' && (
           <BookingsSection bookings={bookings} loading={loading} updateStatus={updateStatus} deleteBooking={deleteBooking} onRefresh={loadBookings} />
         )}
