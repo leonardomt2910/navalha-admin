@@ -362,7 +362,7 @@ function PlansSection({ owner }) {
 }
 
 // ── seção agendamentos ─────────────────────────────────────────────────────────
-function BookingsSection({ bookings, loading, updateStatus, deleteBooking }) {
+function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRefresh }) {
   const [filterDate,   setFilterDate]   = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [detail,       setDetail]       = useState(null)
@@ -375,7 +375,13 @@ function BookingsSection({ bookings, loading, updateStatus, deleteBooking }) {
 
   return (
     <div>
-      <PageTitle>Agendamentos</PageTitle>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <h1 style={{ fontFamily: FONT, fontSize: 26, fontWeight: 700, color: T.primary, letterSpacing: '-0.02em', lineHeight: 1.1, margin: 0 }}>Agendamentos</h1>
+        <button onClick={onRefresh} disabled={loading} title="Atualizar"
+          style={{ background: 'transparent', border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, padding: '7px 12px', color: loading ? T.hint : T.muted, fontFamily: FONT_MONO, fontSize: 14, cursor: loading ? 'default' : 'pointer', transition: 'color 0.15s' }}>
+          ↻
+        </button>
+      </div>
       <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <div>
           <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Data</p>
@@ -447,7 +453,7 @@ function BookingsSection({ bookings, loading, updateStatus, deleteBooking }) {
 }
 
 // ── seção calendário ──────────────────────────────────────────────────────────
-function CalendarSection({ bookings, updateStatus }) {
+function CalendarSection({ bookings, updateStatus, onRefresh }) {
   const isMobile = useIsMobile()
   const now = new Date()
   const [calYear,  setCalYear]  = useState(now.getFullYear())
@@ -478,7 +484,13 @@ function CalendarSection({ bookings, updateStatus }) {
 
   return (
     <div>
-      <PageTitle>Calendário</PageTitle>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <h1 style={{ fontFamily: FONT, fontSize: 26, fontWeight: 700, color: T.primary, letterSpacing: '-0.02em', lineHeight: 1.1, margin: 0 }}>Calendário</h1>
+        <button onClick={onRefresh} title="Atualizar"
+          style={{ background: 'transparent', border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, padding: '7px 12px', color: T.muted, fontFamily: FONT_MONO, fontSize: 14, cursor: 'pointer', transition: 'color 0.15s' }}>
+          ↻
+        </button>
+      </div>
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         {/* grade do mês */}
         <div style={{ flex: isMobile ? '1 1 100%' : '0 0 auto', width: isMobile ? '100%' : 320 }}>
@@ -550,7 +562,7 @@ function CalendarSection({ bookings, updateStatus }) {
 }
 
 // ── seção relatórios ──────────────────────────────────────────────────────────
-function ReportsSection({ bookings }) {
+function ReportsSection({ bookings, onRefresh }) {
   const confirmed = bookings.filter(b => b.status === 'confirmed' || b.status === 'manual')
   const monthPfx  = today().slice(0, 7)
   const thisMonth = bookings.filter(b => b.date.startsWith(monthPfx))
@@ -558,7 +570,13 @@ function ReportsSection({ bookings }) {
 
   return (
     <div>
-      <PageTitle>Relatórios</PageTitle>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <h1 style={{ fontFamily: FONT, fontSize: 26, fontWeight: 700, color: T.primary, letterSpacing: '-0.02em', lineHeight: 1.1, margin: 0 }}>Relatórios</h1>
+        <button onClick={onRefresh} title="Atualizar"
+          style={{ background: 'transparent', border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, padding: '7px 12px', color: T.muted, fontFamily: FONT_MONO, fontSize: 14, cursor: 'pointer', transition: 'color 0.15s' }}>
+          ↻
+        </button>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
         {[
           ['Total este mês',        thisMonth.length,                                                      'agendamentos'],
@@ -1022,13 +1040,13 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
       {TopBar}
       <main style={{ flex: 1, padding: isMobile ? '20px 16px' : '32px 36px', overflowY: 'auto', maxWidth: isMobile ? undefined : 900, paddingBottom: isMobile ? 80 : 32 }}>
         {section === 'bookings' && (
-          <BookingsSection bookings={bookings} loading={loading} updateStatus={updateStatus} deleteBooking={deleteBooking} />
+          <BookingsSection bookings={bookings} loading={loading} updateStatus={updateStatus} deleteBooking={deleteBooking} onRefresh={loadBookings} />
         )}
         {section === 'calendar' && (
-          <CalendarSection bookings={bookings} updateStatus={updateStatus} />
+          <CalendarSection bookings={bookings} updateStatus={updateStatus} onRefresh={loadBookings} />
         )}
         {section === 'reports' && (
-          <ReportsSection bookings={bookings} />
+          <ReportsSection bookings={bookings} onRefresh={loadBookings} />
         )}
         {section === 'settings' && (
           <SettingsSection
