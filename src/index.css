@@ -6,7 +6,7 @@ body {
   color: #F5EAD0;
   font-family: 'Space Grotesk', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 input, button, select, textarea { font: inherit; }
