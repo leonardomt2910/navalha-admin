@@ -33,6 +33,20 @@ function slugify(v)     { return softSlugify(v).replace(/^-+|-+$/g, '') }
 function centsToReal(cents) { return (cents / 100).toFixed(2).replace('.', ',') }
 function realToCents(v) { return Math.round(parseFloat(v.replace(',', '.')) * 100) || 0 }
 
+function formatDoc(v) {
+  const d = v.replace(/\D/g, '').slice(0, 14)
+  if (d.length <= 11)
+    return d
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})$/, '$1-$2')
+  return d
+    .replace(/(\d{2})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1/$2')
+    .replace(/(\d{4})(\d{1,2})$/, '$1-$2')
+}
+
 function formatPhone(v) {
   const d = v.replace(/\D/g, '').slice(0, 11)
   if (!d.length) return ''
@@ -79,6 +93,7 @@ export default function Onboarding({ owner, onComplete }) {
   const [barbName, setBarbName] = useState(owner.name || '')
   const [slug, setSlug]         = useState(owner.slug || '')
   const [whatsapp, setWhatsapp] = useState(owner.whatsapp ? formatPhone(owner.whatsapp.replace(/^55/, '').slice(-11)) : '')
+  const [cpfCnpj, setCpfCnpj]   = useState(owner.cpf_cnpj ? formatDoc(owner.cpf_cnpj) : '')
   const [slugStatus, setSlugStatus] = useState('idle')
   const slugTimer = useRef(null)
 
@@ -107,9 +122,10 @@ export default function Onboarding({ owner, onComplete }) {
     setError('')
     setSaving(true)
     try {
-      const rawPhone = whatsapp.replace(/\D/g, '')
+      const rawPhone  = whatsapp.replace(/\D/g, '')
+      const rawCpfCnpj = cpfCnpj.replace(/\D/g, '')
       const { error: e1 } = await supabase.from('owners').update({
-        name: barbName.trim(), slug, whatsapp: rawPhone, active: true,
+        name: barbName.trim(), slug, whatsapp: rawPhone, cpf_cnpj: rawCpfCnpj, active: true,
       }).eq('id', owner.id)
       if (e1) throw e1
 
@@ -130,7 +146,7 @@ export default function Onboarding({ owner, onComplete }) {
       const { error: e3 } = await supabase.from('hours_config').insert(hrs)
       if (e3) throw e3
 
-      onComplete({ ...owner, name: barbName.trim(), slug, whatsapp: rawPhone })
+      onComplete({ ...owner, name: barbName.trim(), slug, whatsapp: rawPhone, cpf_cnpj: rawCpfCnpj })
     } catch (err) {
       setError(err.message || 'Erro ao salvar. Tente novamente.')
     } finally {
@@ -194,7 +210,8 @@ export default function Onboarding({ owner, onComplete }) {
     taken:     'Este slug já está em uso. Escolha outro.',
   }[slugStatus]
 
-  const step1Valid = barbName.trim().length >= 2 && slug.length >= 3 && slugStatus === 'available'
+  const cpfCnpjValid = cpfCnpj.replace(/\D/g, '').length === 11 || cpfCnpj.replace(/\D/g, '').length === 14
+  const step1Valid = barbName.trim().length >= 2 && slug.length >= 3 && slugStatus === 'available' && cpfCnpjValid
 
   const renderStep1 = (
     <>
@@ -217,6 +234,15 @@ export default function Onboarding({ owner, onComplete }) {
         onChange={e => setWhatsapp(formatPhone(e.target.value))}
         inputMode="numeric"
         hint="Número para receber notificações de agendamento."
+      />
+      <Input
+        label="CPF / CNPJ"
+        placeholder="000.000.000-00"
+        value={cpfCnpj}
+        onChange={e => setCpfCnpj(formatDoc(e.target.value))}
+        inputMode="numeric"
+        hint="Obrigatório para emissão de cobranças."
+        error={cpfCnpj.length > 0 && !cpfCnpjValid ? 'CPF deve ter 11 dígitos ou CNPJ 14 dígitos.' : ''}
       />
       <PrimaryBtn disabled={!step1Valid} onClick={() => setStep(2)}>Continuar</PrimaryBtn>
     </>
