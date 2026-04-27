@@ -50,6 +50,7 @@ const NAV = [
   { key: 'calendar', label: 'Calendário',   icon: '▦' },
   { key: 'reports',  label: 'Relatórios',   icon: '▤' },
   { key: 'settings', label: 'Configurações', icon: '◎' },
+  { key: 'plans',    label: 'Planos',        icon: '◇' },
 ]
 
 // ── componentes locais ────────────────────────────────────────────────────────
@@ -79,6 +80,165 @@ function SettingsTabs({ active, onChange }) {
           {label}
         </button>
       ))}
+    </div>
+  )
+}
+
+// ── seção planos ──────────────────────────────────────────────────────────────
+const PLANS = [
+  {
+    key: 'essencial',
+    name: 'Essencial',
+    price: 'R$ 69',
+    period: '/mês',
+    target: 'Barbearia com 1–3 cadeiras, dono que quer parar de usar caderno e WhatsApp.',
+    highlight: false,
+    features: [
+      'Agendamento online 24h',
+      'Link de agendamento personalizado',
+      'Lembrete automático via WhatsApp com confirmação',
+      'Liberação automática de horário se cliente não confirmar',
+      'Cadastro ilimitado de clientes, serviços e profissionais',
+      'Financeiro básico (caixa diário)',
+      'Acesso web — computador, celular, tablet',
+      'Suporte por WhatsApp',
+    ],
+  },
+  {
+    key: 'profissional',
+    name: 'Profissional',
+    price: 'R$ 129',
+    period: '/mês',
+    target: 'Barbearia com 3+ cadeiras, dono que quer profissionalizar a marca e ter visão do negócio.',
+    highlight: true,
+    features: [
+      'Tudo do plano Essencial',
+      'Dashboard completo — taxa de retorno, ticket médio por barbeiro, horários ociosos, top 10 clientes',
+      'Relatórios mensais automáticos por e-mail',
+      'Suporte prioritário por WhatsApp',
+    ],
+  },
+]
+
+const ADDON = {
+  name: 'Reativação Inteligente',
+  price: '+R$ 39',
+  period: '/mês',
+  badge: 'Add-on',
+  description: 'Disponível em qualquer plano. O sistema identifica clientes que não voltam há 30, 45 ou 60 dias e dispara mensagem automática via WhatsApp.',
+}
+
+const WHATSAPP_SALES = 'https://wa.me/5511999999999?text=Olá%2C%20quero%20saber%20mais%20sobre%20os%20planos%20do%20Navalha'
+
+function PlansSection() {
+  return (
+    <div>
+      <PageTitle>Planos</PageTitle>
+      <p style={{ fontFamily: FONT, fontSize: 14, color: T.muted, marginBottom: 36, maxWidth: 560 }}>
+        Escolha o plano ideal para a sua barbearia. Todos os planos incluem acesso imediato após a contratação.
+      </p>
+
+      {/* cards de plano */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 16 }}>
+        {PLANS.map(plan => (
+          <div key={plan.key} style={{
+            background: plan.highlight ? 'rgba(235,188,99,0.06)' : INK2,
+            border: `1px solid ${plan.highlight ? ACCENT : HAIRLINE}`,
+            borderRadius: RADIUS,
+            padding: '28px 24px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 0,
+            position: 'relative',
+          }}>
+            {plan.highlight && (
+              <div style={{
+                position: 'absolute', top: -1, right: 20,
+                background: ACCENT, color: INK,
+                fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700,
+                letterSpacing: '0.12em', textTransform: 'uppercase',
+                padding: '3px 10px', borderRadius: '0 0 6px 6px',
+              }}>
+                Recomendado
+              </div>
+            )}
+
+            <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: plan.highlight ? ACCENT : T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10 }}>
+              {plan.name}
+            </p>
+
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, marginBottom: 6 }}>
+              <span style={{ fontFamily: FONT_MONO, fontSize: 32, fontWeight: 700, color: T.primary }}>{plan.price}</span>
+              <span style={{ fontFamily: FONT_MONO, fontSize: 13, color: T.hint }}>{plan.period}</span>
+            </div>
+
+            <p style={{ fontFamily: FONT, fontSize: 12, color: T.muted, lineHeight: 1.5, marginBottom: 24, minHeight: 48 }}>{plan.target}</p>
+
+            <div style={{ width: '100%', height: 1, background: HAIRLINE, marginBottom: 20 }} />
+
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10, flex: 1, marginBottom: 28 }}>
+              {plan.features.map((f, i) => (
+                <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: ACCENT, marginTop: 2, flexShrink: 0 }}>—</span>
+                  <span style={{ fontFamily: FONT, fontSize: 13, color: T.muted, lineHeight: 1.5 }}>{f}</span>
+                </li>
+              ))}
+            </ul>
+
+            <a href={WHATSAPP_SALES} target="_blank" rel="noreferrer" style={{
+              display: 'block', textAlign: 'center',
+              padding: '12px 0',
+              background: plan.highlight ? ACCENT : 'transparent',
+              border: `1px solid ${plan.highlight ? ACCENT : HAIRLINE}`,
+              borderRadius: RADIUS,
+              color: plan.highlight ? INK : T.primary,
+              fontFamily: FONT, fontWeight: 700, fontSize: 14,
+              textDecoration: 'none',
+              transition: 'opacity 0.15s',
+            }}>
+              Falar com a equipe
+            </a>
+          </div>
+        ))}
+      </div>
+
+      {/* add-on */}
+      <div style={{
+        background: INK2,
+        border: `1px dashed ${HAIRLINE}`,
+        borderRadius: RADIUS,
+        padding: '20px 24px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{
+            background: 'rgba(235,188,99,0.12)', border: `1px solid rgba(235,188,99,0.3)`,
+            borderRadius: 6, padding: '2px 8px',
+            fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700,
+            letterSpacing: '0.12em', textTransform: 'uppercase', color: ACCENT,
+          }}>{ADDON.badge}</div>
+          <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: T.primary }}>{ADDON.name}</p>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'baseline', gap: 2 }}>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 18, fontWeight: 700, color: T.primary }}>{ADDON.price}</span>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 12, color: T.hint }}>{ADDON.period}</span>
+          </div>
+        </div>
+        <p style={{ fontFamily: FONT, fontSize: 13, color: T.muted, lineHeight: 1.6, maxWidth: 600 }}>{ADDON.description}</p>
+        <a href={WHATSAPP_SALES} target="_blank" rel="noreferrer" style={{
+          alignSelf: 'flex-start',
+          padding: '9px 20px',
+          background: 'transparent',
+          border: `1px solid ${HAIRLINE}`,
+          borderRadius: RADIUS,
+          color: T.primary,
+          fontFamily: FONT, fontWeight: 600, fontSize: 13,
+          textDecoration: 'none',
+        }}>
+          Adicionar ao plano
+        </a>
+      </div>
     </div>
   )
 }
@@ -730,6 +890,7 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
             onHoursChange={loadHours} showToast={showToast}
           />
         )}
+        {section === 'plans' && <PlansSection />}
       </main>
       <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
