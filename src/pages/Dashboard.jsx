@@ -65,6 +65,30 @@ function useIsMobile(bp = 680) {
 }
 
 // ── componentes locais ────────────────────────────────────────────────────────
+function RefreshBtn({ onRefresh }) {
+  const [state, setState] = useState('idle') // idle | loading | done
+
+  async function handle() {
+    if (state !== 'idle') return
+    setState('loading')
+    await onRefresh()
+    setState('done')
+    setTimeout(() => setState('idle'), 2000)
+  }
+
+  const label = state === 'loading' ? 'Atualizando...' : state === 'done' ? 'Atualizado' : 'Atualizar'
+  const color = state === 'done' ? '#4ade80' : state === 'loading' ? T.hint : T.muted
+  const borderColor = state === 'done' ? 'rgba(74,222,128,0.4)' : HAIRLINE
+
+  return (
+    <button onClick={handle} disabled={state !== 'idle'} title="Atualizar"
+      style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: `1px solid ${borderColor}`, borderRadius: RADIUS, padding: '7px 14px', color, fontFamily: FONT_MONO, fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', cursor: state !== 'idle' ? 'default' : 'pointer', transition: 'color 0.2s, border-color 0.2s' }}>
+      <span style={{ fontSize: 14, display: 'inline-block', animation: state === 'loading' ? 'spin 1s linear infinite' : 'none' }}>↻</span>
+      {label}
+    </button>
+  )
+}
+
 function TimeSelect({ value, onChange, placeholder = '—' }) {
   return (
     <select value={value || ''} onChange={e => onChange(e.target.value)}
@@ -377,10 +401,7 @@ function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRef
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <h1 style={{ fontFamily: FONT, fontSize: 26, fontWeight: 700, color: T.primary, letterSpacing: '-0.02em', lineHeight: 1.1, margin: 0 }}>Agendamentos</h1>
-        <button onClick={onRefresh} disabled={loading} title="Atualizar"
-          style={{ background: 'transparent', border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, padding: '7px 12px', color: loading ? T.hint : T.muted, fontFamily: FONT_MONO, fontSize: 14, cursor: loading ? 'default' : 'pointer', transition: 'color 0.15s' }}>
-          ↻
-        </button>
+        <RefreshBtn onRefresh={onRefresh} />
       </div>
       <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <div>

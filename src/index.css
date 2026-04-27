@@ -1,4 +1,5 @@
 *, *::before, *::after { box-sizing: border-box; }
+@keyframes spin { to { transform: rotate(360deg); } }
 * { margin: 0; padding: 0; }
 
 body {
