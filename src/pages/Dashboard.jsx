@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase.js'
 import {
   NavalhaLogo, Eyebrow, PrimaryBtn, SecBtn, GhostBtn, IconBtn,
@@ -473,108 +473,299 @@ function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRef
   )
 }
 
+// ── helpers de semana ─────────────────────────────────────────────────────────
+const MES_ABBR = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
+
+function getMondayOfCurrentWeek() {
+  const now = new Date()
+  const dow  = now.getDay() // 0=Dom…6=Sáb
+  const diff = dow === 0 ? -6 : 1 - dow // distância até segunda
+  const m    = new Date(now)
+  m.setDate(now.getDate() + diff)
+  m.setHours(12, 0, 0, 0)
+  return m
+}
+
+function getWeekDays(offset) {
+  const monday = getMondayOfCurrentWeek()
+  monday.setDate(monday.getDate() + offset * 7)
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday)
+    d.setDate(monday.getDate() + i)
+    return d
+  })
+}
+
+function toDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// ── pill de agendamento (calendário semanal) ──────────────────────────────────
+function BookingPill({ b, onClick }) {
+  const borderColor = STATUS_COLOR[b.status] || HAIRLINE
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        padding: '5px 8px',
+        background: 'rgba(255,255,255,0.03)',
+        border: `1px solid ${HAIRLINE}`,
+        borderLeft: `3px solid ${borderColor}`,
+        borderRadius: 8,
+        cursor: 'pointer',
+        marginBottom: 4,
+      }}
+    >
+      <div style={{ fontFamily: FONT_MONO, fontSize: 11, color: ACCENT, fontWeight: 600, lineHeight: 1.3 }}>
+        {b.hour?.slice(0, 5)}
+      </div>
+      <div style={{ fontFamily: FONT, fontSize: 11, color: T.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
+        {b.client_name}
+      </div>
+      <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4 }}>
+        {b.services?.name ?? '—'}
+      </div>
+    </div>
+  )
+}
+
 // ── seção calendário ──────────────────────────────────────────────────────────
 function CalendarSection({ bookings, updateStatus, onRefresh }) {
   const isMobile = useIsMobile()
-  const now = new Date()
-  const [calYear,  setCalYear]  = useState(now.getFullYear())
-  const [calMonth, setCalMonth] = useState(now.getMonth())
-  const [selDay,   setSelDay]   = useState(null)
+  const [weekOffset, setWeekOffset] = useState(0)  // 0 = semana atual
+  const [selDay,     setSelDay]     = useState(null)
+  const [detail,     setDetail]     = useState(null)
 
-  const daysInMonth = getDaysInMonth(calYear, calMonth)
-  const firstDay    = getFirstDay(calYear, calMonth) // Mon-first offset
-  const monthDate   = new Date(calYear, calMonth, 1)
+  const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset])
+  const todayStr = today()
 
-  function prevMonth() {
-    setSelDay(null)
-    if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11) } else setCalMonth(m => m - 1)
+  // Ao trocar de semana: seleciona hoje (se estiver na semana) ou segunda
+  useEffect(() => {
+    const todayInWeek = weekDays.find(d => toDateStr(d) === todayStr)
+    setSelDay(todayInWeek || weekDays[0])
+  }, [weekOffset]) // eslint-disable-line
+
+  function bookingsForDate(d) {
+    return bookings
+      .filter(b => b.date === toDateStr(d))
+      .sort((a, b) => (a.hour > b.hour ? 1 : -1))
   }
-  function nextMonth() {
-    setSelDay(null)
-    if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0) } else setCalMonth(m => m + 1)
-  }
 
-  const todayStr    = today()
-  const selectedStr = selDay != null ? `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(selDay).padStart(2, '0')}` : null
-  const dayBookings = selectedStr ? bookings.filter(b => b.date === selectedStr) : []
+  const wStart    = weekDays[0]
+  const wEnd      = weekDays[6]
+  const weekLabel = `${wStart.getDate()} ${MES_ABBR[wStart.getMonth()]} – ${wEnd.getDate()} ${MES_ABBR[wEnd.getMonth()]} ${wEnd.getFullYear()}`
 
-  function bookingsForDay(day) {
-    const d = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-    return bookings.filter(b => b.date === d)
-  }
+  const selDayStr      = selDay ? toDateStr(selDay) : null
+  const selDayBookings = selDayStr
+    ? bookings.filter(b => b.date === selDayStr).sort((a, b) => (a.hour > b.hour ? 1 : -1))
+    : []
+
+  // ── navegação de semana ────────────────────────────────────────────────────
+  const WeekNav = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+      <button
+        onClick={() => setWeekOffset(w => w - 1)}
+        style={{ background: 'none', border: `1px solid ${HAIRLINE}`, borderRadius: 8, padding: '6px 14px', color: T.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1, flexShrink: 0 }}
+      >←</button>
+
+      <div style={{ flex: 1, textAlign: 'center' }}>
+        <p style={{ fontFamily: FONT_MONO, fontSize: 12, color: T.primary, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          {weekLabel}
+        </p>
+        {weekOffset !== 0 && (
+          <button
+            onClick={() => setWeekOffset(0)}
+            style={{ background: 'none', border: 'none', color: ACCENT, fontFamily: FONT_MONO, fontSize: 9, letterSpacing: '0.12em', cursor: 'pointer', padding: '2px 0', marginTop: 2, textDecoration: 'underline', textUnderlineOffset: 2 }}
+          >SEMANA ATUAL</button>
+        )}
+      </div>
+
+      <button
+        onClick={() => setWeekOffset(w => w + 1)}
+        style={{ background: 'none', border: `1px solid ${HAIRLINE}`, borderRadius: 8, padding: '6px 14px', color: T.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1, flexShrink: 0 }}
+      >→</button>
+    </div>
+  )
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+      {/* cabeçalho da seção */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <h1 style={{ fontFamily: FONT, fontSize: 26, fontWeight: 700, color: T.primary, letterSpacing: '-0.02em', lineHeight: 1.1, margin: 0 }}>Calendário</h1>
         <RefreshBtn onRefresh={onRefresh} />
       </div>
-      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        {/* grade do mês */}
-        <div style={{ flex: isMobile ? '1 1 100%' : '0 0 auto', width: isMobile ? '100%' : 320 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <button onClick={prevMonth} style={{ background: 'none', border: `1px solid ${HAIRLINE}`, borderRadius: 8, padding: '6px 14px', color: T.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>←</button>
-            <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15, color: T.primary, textTransform: 'capitalize' }}>{fmtMonthYear(monthDate)}</p>
-            <button onClick={nextMonth} style={{ background: 'none', border: `1px solid ${HAIRLINE}`, borderRadius: 8, padding: '6px 14px', color: T.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>→</button>
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 4 }}>
-            {WEEK_LABELS.map(d => (
-              <div key={d} style={{ fontFamily: FONT_MONO, fontSize: 9, color: d === 'Dom' ? 'rgba(245,234,208,0.2)' : T.hint, textAlign: 'center', padding: '4px 0', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{d}</div>
-            ))}
-          </div>
+      {WeekNav}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
-            {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
-            {Array.from({ length: daysInMonth }).map((_, i) => {
-              const day     = i + 1
-              const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-              const bks     = bookingsForDay(day)
-              const isToday = dateStr === todayStr
-              const isSel   = selDay === day
+      {isMobile ? (
+        /* ── MOBILE: strip de 7 dias + painel de detalhes ── */
+        <>
+          {/* strip horizontal de dias */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 20 }}>
+            {weekDays.map((d, i) => {
+              const bks     = bookingsForDate(d)
+              const ds      = toDateStr(d)
+              const isToday = ds === todayStr
+              const isSel   = selDay && toDateStr(selDay) === ds
               const hasPending = bks.some(b => b.status === 'pending')
               return (
-                <div key={day}
-                  onClick={() => setSelDay(day === selDay ? null : day)}
-                  style={{ aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: 8, cursor: 'pointer', border: `1px solid ${isSel ? ACCENT : isToday ? 'rgba(235,188,99,0.3)' : 'transparent'}`, background: isSel ? ACCENT_DIM : 'transparent', transition: 'background 0.15s', userSelect: 'none' }}>
-                  <span style={{ fontFamily: FONT_MONO, fontSize: 12, color: isSel ? ACCENT : isToday ? ACCENT : T.primary }}>{day}</span>
-                  {bks.length > 0 && (
-                    <div style={{ width: 5, height: 5, borderRadius: '50%', background: hasPending ? STATUS_COLOR.pending : STATUS_COLOR.confirmed, marginTop: 2 }} />
+                <div
+                  key={i}
+                  onClick={() => setSelDay(d)}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                    padding: '8px 4px', borderRadius: RADIUS,
+                    border: `1px solid ${isSel ? ACCENT : isToday ? 'rgba(235,188,99,0.3)' : 'transparent'}`,
+                    background: isSel ? ACCENT_DIM : 'transparent',
+                    cursor: 'pointer', transition: 'background 0.15s', userSelect: 'none',
+                  }}
+                >
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 8, color: isSel ? ACCENT : T.hint, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    {WEEK_LABELS[i]}
+                  </span>
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 15, fontWeight: 700, color: isSel || isToday ? ACCENT : T.primary, lineHeight: 1 }}>
+                    {d.getDate()}
+                  </span>
+                  {bks.length > 0 ? (
+                    <div style={{ fontFamily: FONT_MONO, fontSize: 8, fontWeight: 700, background: hasPending ? STATUS_COLOR.pending : STATUS_COLOR.confirmed, color: INK, borderRadius: 4, padding: '1px 5px', minWidth: 16, textAlign: 'center' }}>
+                      {bks.length}
+                    </div>
+                  ) : (
+                    <div style={{ height: 14 }} />
                   )}
                 </div>
               )
             })}
           </div>
-        </div>
 
-        {/* painel lateral do dia selecionado */}
-        {selDay != null && (
-          <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-            <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15, color: T.primary, marginBottom: 16, textTransform: 'capitalize' }}>{fmtDateFull(selectedStr)}</p>
-            {dayBookings.length === 0 ? (
-              <p style={{ fontFamily: FONT, fontSize: 14, color: T.hint }}>Sem agendamentos neste dia.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {dayBookings.sort((a, b) => a.hour > b.hour ? 1 : -1).map(b => (
-                  <div key={b.id} style={{ padding: '12px 16px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                      <span style={{ fontFamily: FONT_MONO, fontWeight: 600, fontSize: 14, color: ACCENT }}>{b.hour?.slice(0, 5)}</span>
+          {/* lista do dia selecionado */}
+          {selDay && (
+            <div>
+              <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary, marginBottom: 12, textTransform: 'capitalize' }}>
+                {selDay.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
+                {selDayBookings.length > 0 && (
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.hint, fontWeight: 400, marginLeft: 8 }}>
+                    {selDayBookings.length} agend.
+                  </span>
+                )}
+              </p>
+              {selDayBookings.length === 0 ? (
+                <p style={{ fontFamily: FONT, fontSize: 14, color: T.hint, textAlign: 'center', padding: '32px 0' }}>
+                  Sem agendamentos.
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {selDayBookings.map(b => (
+                    <div
+                      key={b.id}
+                      onClick={() => setDetail(b)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: INK2, border: `1px solid ${HAIRLINE}`, borderLeft: `3px solid ${STATUS_COLOR[b.status] || HAIRLINE}`, borderRadius: RADIUS, cursor: 'pointer' }}
+                    >
+                      <span style={{ fontFamily: FONT_MONO, fontSize: 15, fontWeight: 600, color: ACCENT, minWidth: 44 }}>
+                        {b.hour?.slice(0, 5)}
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary }}>{b.client_name}</p>
+                        <p style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.muted }}>{b.services?.name ?? '—'}</p>
+                      </div>
                       <Badge status={b.status} />
                     </div>
-                    <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary }}>{b.client_name}</p>
-                    <p style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.muted, marginTop: 2 }}>{b.services?.name ?? '—'}</p>
-                    {b.status !== 'rejected' && (
-                      <div style={{ marginTop: 8 }}>
-                        <IconBtn danger onClick={() => updateStatus(b.id, 'rejected')}>Cancelar</IconBtn>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      ) : (
+        /* ── DESKTOP: grid de 7 colunas com scroll interno ── */
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, alignItems: 'start' }}>
+          {weekDays.map((d, i) => {
+            const bks        = bookingsForDate(d)
+            const ds         = toDateStr(d)
+            const isToday    = ds === todayStr
+            const hasPending = bks.some(b => b.status === 'pending')
+            return (
+              <div
+                key={i}
+                style={{
+                  background: INK2,
+                  border: `1px solid ${isToday ? 'rgba(235,188,99,0.4)' : HAIRLINE}`,
+                  borderRadius: RADIUS,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  minHeight: 120,
+                }}
+              >
+                {/* cabeçalho do dia */}
+                <div style={{
+                  padding: '10px 8px 8px',
+                  borderBottom: `1px solid ${HAIRLINE}`,
+                  background: isToday ? 'rgba(235,188,99,0.06)' : 'transparent',
+                  textAlign: 'center',
+                  flexShrink: 0,
+                }}>
+                  <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: isToday ? ACCENT : T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>
+                    {WEEK_LABELS[i]}
+                  </p>
+                  <p style={{ fontFamily: FONT_MONO, fontSize: 20, fontWeight: 700, color: isToday ? ACCENT : T.primary, lineHeight: 1 }}>
+                    {d.getDate()}
+                  </p>
+                  {bks.length > 0 && (
+                    <div style={{ marginTop: 5, fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700, color: INK, background: hasPending ? STATUS_COLOR.pending : STATUS_COLOR.confirmed, borderRadius: 4, display: 'inline-block', padding: '1px 6px' }}>
+                      {bks.length}
+                    </div>
+                  )}
+                </div>
+
+                {/* lista de agendamentos — scroll se muitos */}
+                <div style={{ padding: '8px 6px', overflowY: 'auto', maxHeight: 380, flex: 1 }}>
+                  {bks.length === 0 ? (
+                    <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: 'rgba(245,234,208,0.18)', textAlign: 'center', padding: '14px 0' }}>—</p>
+                  ) : (
+                    bks.map(b => <BookingPill key={b.id} b={b} onClick={() => setDetail(b)} />)
+                  )}
+                </div>
               </div>
-            )}
-          </div>
-        )}
-      </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* modal de detalhes */}
+      {detail && (
+        <Modal onClose={() => setDetail(null)}>
+          <Card>
+            <Eyebrow>Detalhes do agendamento</Eyebrow>
+            <h3 style={{ fontFamily: FONT, fontSize: 20, fontWeight: 700, color: T.primary, marginBottom: 20 }}>
+              {detail.client_name}
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
+              {[
+                ['Serviço',  detail.services?.name ?? '—'],
+                ['Data',     fmtDateFull(detail.date)],
+                ['Horário',  detail.hour?.slice(0, 5)],
+                ['Telefone', phoneToDisplay(detail.client_phone)],
+                ['Status',   <Badge key="s" status={detail.status} />],
+              ].map(([label, value]) => (
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</span>
+                  <span style={{ fontFamily: FONT, fontSize: 14, color: T.primary }}>{value}</span>
+                </div>
+              ))}
+            </div>
+            <Divider />
+            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+              {detail.status !== 'rejected' && (
+                <SecBtn onClick={() => { updateStatus(detail.id, 'rejected'); setDetail(null) }} style={{ flex: 1 }}>
+                  Cancelar agendamento
+                </SecBtn>
+              )}
+              <GhostBtn onClick={() => setDetail(null)}>Fechar</GhostBtn>
+            </div>
+          </Card>
+        </Modal>
+      )}
     </div>
   )
 }
