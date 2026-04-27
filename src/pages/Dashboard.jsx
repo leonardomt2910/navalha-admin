@@ -507,10 +507,7 @@ function CalendarSection({ bookings, updateStatus, onRefresh }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <h1 style={{ fontFamily: FONT, fontSize: 26, fontWeight: 700, color: T.primary, letterSpacing: '-0.02em', lineHeight: 1.1, margin: 0 }}>Calendário</h1>
-        <button onClick={onRefresh} title="Atualizar"
-          style={{ background: 'transparent', border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, padding: '7px 12px', color: T.muted, fontFamily: FONT_MONO, fontSize: 14, cursor: 'pointer', transition: 'color 0.15s' }}>
-          ↻
-        </button>
+        <RefreshBtn onRefresh={onRefresh} />
       </div>
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         {/* grade do mês */}
@@ -593,10 +590,7 @@ function ReportsSection({ bookings, onRefresh }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <h1 style={{ fontFamily: FONT, fontSize: 26, fontWeight: 700, color: T.primary, letterSpacing: '-0.02em', lineHeight: 1.1, margin: 0 }}>Relatórios</h1>
-        <button onClick={onRefresh} title="Atualizar"
-          style={{ background: 'transparent', border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, padding: '7px 12px', color: T.muted, fontFamily: FONT_MONO, fontSize: 14, cursor: 'pointer', transition: 'color 0.15s' }}>
-          ↻
-        </button>
+        <RefreshBtn onRefresh={onRefresh} />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
         {[
