@@ -245,7 +245,7 @@ function PlansSection() {
 
 // ── seção agendamentos ─────────────────────────────────────────────────────────
 function BookingsSection({ bookings, loading, updateStatus, deleteBooking }) {
-  const [filterDate,   setFilterDate]   = useState(today())
+  const [filterDate,   setFilterDate]   = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [detail,       setDetail]       = useState(null)
 
