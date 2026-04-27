@@ -193,7 +193,7 @@ export function Modal({ children, onClose, width = 480 }) {
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
-export function Toast({ toast, onClose }) {
+export function Toast({ toast, onClose, style = {} }) {
   if (!toast) return null
   const isError = toast.type === 'error'
   return (
@@ -202,6 +202,7 @@ export function Toast({ toast, onClose }) {
       background: isError ? '#F87171' : ACCENT, color: INK,
       borderRadius: RADIUS, padding: '12px 18px', fontFamily: FONT, fontWeight: 600, fontSize: 14,
       boxShadow: '0 8px 32px rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', gap: 12,
+      ...style,
     }}>
       {toast.msg}
       <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: INK, fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>

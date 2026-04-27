@@ -46,12 +46,23 @@ const TIME_SLOTS = Array.from({ length: 35 }, (_, i) => {
 })
 
 const NAV = [
-  { key: 'bookings', label: 'Agendamentos', icon: '◈' },
-  { key: 'calendar', label: 'Calendário',   icon: '▦' },
-  { key: 'reports',  label: 'Relatórios',   icon: '▤' },
-  { key: 'settings', label: 'Configurações', icon: '◎' },
-  { key: 'plans',    label: 'Planos',        icon: '◇' },
+  { key: 'bookings', label: 'Agendamentos', short: 'Agenda',  icon: '◈' },
+  { key: 'calendar', label: 'Calendário',   short: 'Agenda',  icon: '▦' },
+  { key: 'reports',  label: 'Relatórios',   short: 'Relatos', icon: '▤' },
+  { key: 'settings', label: 'Configurações', short: 'Config', icon: '◎' },
+  { key: 'plans',    label: 'Planos',        short: 'Planos', icon: '◇' },
 ]
+
+// ── hook responsivo ───────────────────────────────────────────────────────────
+function useIsMobile(bp = 680) {
+  const [v, setV] = useState(() => typeof window !== 'undefined' && window.innerWidth < bp)
+  useEffect(() => {
+    const fn = () => setV(window.innerWidth < bp)
+    window.addEventListener('resize', fn)
+    return () => window.removeEventListener('resize', fn)
+  }, [bp])
+  return v
+}
 
 // ── componentes locais ────────────────────────────────────────────────────────
 function TimeSelect({ value, onChange, placeholder = '—' }) {
@@ -74,9 +85,9 @@ function Toggle({ on, onChange }) {
 
 function SettingsTabs({ active, onChange }) {
   return (
-    <div style={{ display: 'flex', gap: 4, marginBottom: 28, background: INK2, borderRadius: RADIUS, padding: 4, border: `1px solid ${HAIRLINE}`, width: 'fit-content' }}>
+    <div style={{ display: 'flex', gap: 4, marginBottom: 28, background: INK2, borderRadius: RADIUS, padding: 4, border: `1px solid ${HAIRLINE}` }}>
       {[['profile', 'Perfil'], ['services', 'Serviços'], ['hours', 'Horários']].map(([key, label]) => (
-        <button key={key} onClick={() => onChange(key)} style={{ padding: '8px 18px', borderRadius: RADIUS - 4, border: 'none', cursor: 'pointer', background: active === key ? ACCENT : 'transparent', color: active === key ? INK : T.muted, fontFamily: FONT, fontWeight: active === key ? 700 : 400, fontSize: 13, transition: 'all 0.15s' }}>
+        <button key={key} onClick={() => onChange(key)} style={{ flex: 1, padding: '8px 12px', borderRadius: RADIUS - 4, border: 'none', cursor: 'pointer', background: active === key ? ACCENT : 'transparent', color: active === key ? INK : T.muted, fontFamily: FONT, fontWeight: active === key ? 700 : 400, fontSize: 13, transition: 'all 0.15s' }}>
           {label}
         </button>
       ))}
@@ -437,6 +448,7 @@ function BookingsSection({ bookings, loading, updateStatus, deleteBooking }) {
 
 // ── seção calendário ──────────────────────────────────────────────────────────
 function CalendarSection({ bookings, updateStatus }) {
+  const isMobile = useIsMobile()
   const now = new Date()
   const [calYear,  setCalYear]  = useState(now.getFullYear())
   const [calMonth, setCalMonth] = useState(now.getMonth())
@@ -469,7 +481,7 @@ function CalendarSection({ bookings, updateStatus }) {
       <PageTitle>Calendário</PageTitle>
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         {/* grade do mês */}
-        <div style={{ flex: '0 0 auto', width: 320 }}>
+        <div style={{ flex: isMobile ? '1 1 100%' : '0 0 auto', width: isMobile ? '100%' : 320 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <button onClick={prevMonth} style={{ background: 'none', border: `1px solid ${HAIRLINE}`, borderRadius: 8, padding: '6px 14px', color: T.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>←</button>
             <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15, color: T.primary, textTransform: 'capitalize' }}>{fmtMonthYear(monthDate)}</p>
@@ -880,6 +892,7 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
 
 // ── Dashboard principal ───────────────────────────────────────────────────────
 export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdate }) {
+  const isMobile = useIsMobile()
   const [owner,       setOwner]       = useState(initialOwner)
   const [section,     setSection]     = useState('bookings')
   const [bookings,    setBookings]    = useState([])
@@ -941,7 +954,7 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
     loadBookings()
   }
 
-  // ── sidebar ────────────────────────────────────────────────────────────────
+  // ── sidebar (desktop) ─────────────────────────────────────────────────────
   const Sidebar = (
     <div style={{ width: 220, flexShrink: 0, background: INK2, borderRight: `1px solid ${HAIRLINE}`, display: 'flex', flexDirection: 'column', minHeight: '100vh', position: 'sticky', top: 0 }}>
       <div style={{ padding: '24px 20px 20px', borderBottom: `1px solid ${HAIRLINE}` }}>
@@ -977,10 +990,37 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
     </div>
   )
 
+  // ── top bar (mobile) ───────────────────────────────────────────────────────
+  const TopBar = isMobile && (
+    <div style={{ position: 'sticky', top: 0, zIndex: 50, background: INK2, borderBottom: `1px solid ${HAIRLINE}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}>
+      <NavalhaLogo size={22} />
+      <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary }}>
+        {NAV.find(n => n.key === section)?.label ?? ''}
+      </p>
+    </div>
+  )
+
+  // ── bottom nav (mobile) ────────────────────────────────────────────────────
+  const BottomNav = isMobile && (
+    <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: INK2, borderTop: `1px solid ${HAIRLINE}`, display: 'flex', zIndex: 100, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+      {NAV.map(item => {
+        const active = section === item.key
+        return (
+          <button key={item.key} onClick={() => setSection(item.key)}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '10px 4px 8px', border: 'none', cursor: 'pointer', background: 'transparent', color: active ? ACCENT : T.muted, transition: 'color 0.15s' }}>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 17, lineHeight: 1 }}>{item.icon}</span>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: '0.06em', textTransform: 'uppercase', lineHeight: 1 }}>{item.short}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
-      {Sidebar}
-      <main style={{ flex: 1, padding: '32px 36px', overflowY: 'auto', maxWidth: 900 }}>
+    <div style={{ display: 'flex', minHeight: '100vh', flexDirection: isMobile ? 'column' : 'row' }}>
+      {!isMobile && Sidebar}
+      {TopBar}
+      <main style={{ flex: 1, padding: isMobile ? '20px 16px' : '32px 36px', overflowY: 'auto', maxWidth: isMobile ? undefined : 900, paddingBottom: isMobile ? 80 : 32 }}>
         {section === 'bookings' && (
           <BookingsSection bookings={bookings} loading={loading} updateStatus={updateStatus} deleteBooking={deleteBooking} />
         )}
@@ -999,7 +1039,8 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
         )}
         {section === 'plans' && <PlansSection owner={owner} />}
       </main>
-      <Toast toast={toast} onClose={() => setToast(null)} />
+      {BottomNav}
+      <Toast toast={toast} onClose={() => setToast(null)} style={{ bottom: isMobile ? 72 : 24, right: isMobile ? 16 : 24, left: isMobile ? 16 : 'auto' }} />
     </div>
   )
 }
