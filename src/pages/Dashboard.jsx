@@ -431,7 +431,7 @@ function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRef
               <div style={{ fontFamily: FONT_MONO, fontSize: 16, fontWeight: 600, color: ACCENT, minWidth: 48 }}>{b.hour?.slice(0, 5)}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary, marginBottom: 2 }}>{b.client_name}</p>
-                <p style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.muted }}>{b.services?.name ?? '—'} · {new Date(b.date + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
+                <p style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.muted }}>{b.services?.name ?? '—'} · {new Date(b.date + 'T12:00:00').toLocaleDateString('pt-BR')} · {phoneToDisplay(b.client_phone)}</p>
               </div>
               <Badge status={b.status} />
             </div>
