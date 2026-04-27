@@ -134,21 +134,72 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const PLAN_LABEL = { free: 'Gratuito', pro: 'Essencial', premium: 'Profissional' }
 const PLAN_KEY_MAP = { essencial: 'pro', profissional: 'premium' }
 
+function CpfCnpjModal({ onConfirm, onClose }) {
+  const [doc, setDoc] = useState('')
+
+  function formatDoc(v) {
+    const d = v.replace(/\D/g, '').slice(0, 14)
+    if (d.length <= 11)
+      return d.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/, (_, a, b, c, e) =>
+        [a, b, c].filter(Boolean).join('.') + (e ? '-' + e : ''))
+    return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, (_, a, b, c, dd, e) =>
+      `${a}.${b}.${c}/${dd}` + (e ? '-' + e : ''))
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <Card>
+        <Eyebrow>Dados de cobrança</Eyebrow>
+        <h3 style={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: T.primary, marginBottom: 8 }}>
+          Informe seu CPF ou CNPJ
+        </h3>
+        <p style={{ fontFamily: FONT, fontSize: 13, color: T.muted, marginBottom: 24 }}>
+          Obrigatório para emissão das cobranças mensais.
+        </p>
+        <Input
+          label="CPF / CNPJ"
+          placeholder="000.000.000-00 ou 00.000.000/0000-00"
+          value={doc}
+          onChange={e => setDoc(formatDoc(e.target.value))}
+          inputMode="numeric"
+        />
+        <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+          <SecBtn onClick={onClose} style={{ flex: 1 }}>Cancelar</SecBtn>
+          <PrimaryBtn
+            onClick={() => doc.replace(/\D/g, '').length >= 11 && onConfirm(doc)}
+            style={{ flex: 1, opacity: doc.replace(/\D/g, '').length < 11 ? 0.5 : 1 }}
+          >
+            Continuar
+          </PrimaryBtn>
+        </div>
+      </Card>
+    </Modal>
+  )
+}
+
 function PlansSection({ owner }) {
-  const [loading, setLoading] = useState(null) // key do plano sendo processado
+  const [loading,   setLoading]   = useState(null)
+  const [docModal,  setDocModal]  = useState(null) // planKey aguardando CPF/CNPJ
 
   const currentPlan = owner?.plan ?? 'free'
 
   async function handleSubscribe(planKey) {
+    // Se já tem CPF/CNPJ salvo, vai direto; senão abre modal
+    if (!owner?.cpf_cnpj) {
+      setDocModal(planKey)
+      return
+    }
+    await checkout(planKey, owner.cpf_cnpj)
+  }
+
+  async function checkout(planKey, cpfCnpj) {
+    setDocModal(null)
     setLoading(planKey)
     try {
       const res = await fetch(`${SUPABASE_FUNCTIONS_URL}/create-checkout`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ ownerId: owner.id, planKey }),
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ ownerId: owner.id, planKey, cpfCnpj }),
       })
       const data = await res.json()
       if (data.paymentUrl) {
@@ -167,6 +218,13 @@ function PlansSection({ owner }) {
 
   return (
     <div>
+      {docModal && (
+        <CpfCnpjModal
+          onClose={() => setDocModal(null)}
+          onConfirm={cpfCnpj => checkout(docModal, cpfCnpj)}
+        />
+      )}
+
       <PageTitle>Planos</PageTitle>
 
       {/* plano atual */}
