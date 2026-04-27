@@ -7,7 +7,7 @@ import {
 import { FONT, FONT_MONO, T, ACCENT, ACCENT_DIM, INK, INK2, HAIRLINE, RADIUS, STATUS_COLOR } from '../tokens.js'
 
 // URL base do app de agendamento do cliente
-const CLIENT_APP_URL = 'https://barbearia-app-gamma.vercel.app'
+const CLIENT_APP_URL = 'https://barbearia-app-ap6.pages.dev'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function today()        { return new Date().toISOString().split('T')[0] }
