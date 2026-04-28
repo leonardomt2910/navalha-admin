@@ -368,6 +368,7 @@ function PlansSection({ owner }) {
 
 // ── seção agendamentos ─────────────────────────────────────────────────────────
 function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRefresh }) {
+  const isMobile = useIsMobile()
   const [filterDate,   setFilterDate]   = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [detail,       setDetail]       = useState(null)
@@ -377,6 +378,9 @@ function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRef
     const matchStatus = filterStatus === 'all' || b.status === filterStatus
     return matchDate && matchStatus
   })
+
+  const thStyle = { fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', padding: '10px 16px', textAlign: 'left', borderBottom: `1px solid ${HAIRLINE}`, whiteSpace: 'nowrap' }
+  const tdStyle = { padding: '14px 16px', fontFamily: FONT, fontSize: 13, color: T.primary, borderBottom: `1px solid ${HAIRLINE}` }
 
   return (
     <div>
@@ -405,7 +409,7 @@ function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRef
         <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner /></div>
       ) : filtered.length === 0 ? (
         <p style={{ fontFamily: FONT, fontSize: 14, color: T.hint, padding: '40px 0', textAlign: 'center' }}>Nenhum agendamento encontrado.</p>
-      ) : (
+      ) : isMobile ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {filtered.map(b => (
             <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 18px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, cursor: 'pointer' }} onClick={() => setDetail(b)}>
@@ -417,6 +421,36 @@ function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRef
               <Badge status={b.status} />
             </div>
           ))}
+        </div>
+      ) : (
+        <div style={{ background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: 'rgba(235,188,99,0.04)' }}>
+                <th style={thStyle}>Horário</th>
+                <th style={thStyle}>Cliente</th>
+                <th style={thStyle}>Serviço</th>
+                <th style={thStyle}>Data</th>
+                <th style={thStyle}>Telefone</th>
+                <th style={thStyle}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((b, i) => (
+                <tr key={b.id} onClick={() => setDetail(b)}
+                  style={{ cursor: 'pointer', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)', transition: 'background 0.1s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(235,188,99,0.05)'}
+                  onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)'}>
+                  <td style={{ ...tdStyle, fontFamily: FONT_MONO, fontSize: 14, fontWeight: 700, color: ACCENT }}>{b.hour?.slice(0, 5)}</td>
+                  <td style={{ ...tdStyle, fontWeight: 600 }}>{b.client_name}</td>
+                  <td style={{ ...tdStyle, color: T.muted }}>{b.services?.name ?? '—'}</td>
+                  <td style={{ ...tdStyle, fontFamily: FONT_MONO, fontSize: 12, color: T.muted }}>{new Date(b.date + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
+                  <td style={{ ...tdStyle, fontFamily: FONT_MONO, fontSize: 12, color: T.muted }}>{phoneToDisplay(b.client_phone)}</td>
+                  <td style={tdStyle}><Badge status={b.status} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -795,15 +829,17 @@ function ClientLinkSection({ owner, showToast }) {
   )
 
   return (
-    <div style={{ maxWidth: 480 }}>
+    <div>
       <PageTitle>Link do cliente</PageTitle>
-      <p style={{ fontFamily: FONT, fontSize: 14, color: T.muted, marginBottom: 24 }}>
+      <p style={{ fontFamily: FONT, fontSize: 14, color: T.muted, marginBottom: 24, maxWidth: 560 }}>
         Compartilhe este link para seus clientes fazerem agendamentos.
       </p>
-      <div style={{ background: `${ACCENT}12`, border: `1px solid ${ACCENT}40`, borderRadius: RADIUS, padding: '20px 22px' }}>
-        <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: ACCENT, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 10 }}>Link de agendamento</p>
-        <p style={{ fontFamily: FONT_MONO, fontSize: 13, color: T.primary, wordBreak: 'break-all', marginBottom: 18 }}>{clientUrl}</p>
-        <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ background: `${ACCENT}12`, border: `1px solid ${ACCENT}40`, borderRadius: RADIUS, padding: '24px 28px', display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: ACCENT, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 10 }}>Link de agendamento</p>
+          <p style={{ fontFamily: FONT_MONO, fontSize: 14, color: T.primary, wordBreak: 'break-all', marginBottom: 0 }}>{clientUrl}</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           <button onClick={() => navigator.clipboard?.writeText(clientUrl).then(() => showToast('Link copiado.'))}
             style={{ background: ACCENT, border: 'none', borderRadius: RADIUS - 4, padding: '10px 20px', color: INK, fontFamily: FONT_MONO, fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer' }}>
             Copiar
@@ -1301,7 +1337,7 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
           )}
         </div>
       )}
-      <main style={{ flex: 1, padding: isMobile ? '20px 16px' : '32px 36px', overflowY: 'auto', maxWidth: isMobile ? undefined : section === 'calendar' ? undefined : 900, paddingBottom: isMobile ? 80 : 32, position: 'relative' }}>
+      <main style={{ flex: 1, padding: isMobile ? '20px 16px' : '32px 36px', overflowY: 'auto', paddingBottom: isMobile ? 80 : 32, position: 'relative' }}>
         {/* paywall de trial expirado */}
         {trialExpired && section !== 'plans' && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(17,12,8,0.92)', backdropFilter: 'blur(6px)', padding: 32 }}>
