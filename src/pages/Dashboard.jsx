@@ -787,32 +787,86 @@ function CalendarSection({ bookings, updateStatus, onRefresh }) {
 
 // ── seção relatórios ──────────────────────────────────────────────────────────
 function ReportsSection({ bookings, onRefresh }) {
-  const confirmed = bookings.filter(b => b.status === 'confirmed' || b.status === 'manual')
-  const monthPfx  = today().slice(0, 7)
-  const thisMonth = bookings.filter(b => b.date.startsWith(monthPfx))
-  const revenue   = confirmed.filter(b => b.date.startsWith(monthPfx)).reduce((sum, b) => sum + (b.services?.price_cents ?? 0), 0)
+  const currentMonth = today().slice(0, 7)
+  const [selMonth, setSelMonth] = useState(currentMonth)
+
+  // meses disponíveis a partir dos bookings (únicos, decrescente)
+  const availableMonths = useMemo(() => {
+    const set = new Set(bookings.map(b => b.date.slice(0, 7)))
+    set.add(currentMonth)
+    return [...set].sort((a, b) => b.localeCompare(a))
+  }, [bookings, currentMonth])
+
+  function fmtMonthLabel(ym) {
+    const [y, m] = ym.split('-')
+    const name = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+    return name.charAt(0).toUpperCase() + name.slice(1)
+  }
+
+  const inMonth   = bookings.filter(b => b.date.startsWith(selMonth))
+  const confirmed = inMonth.filter(b => b.status === 'confirmed' || b.status === 'manual')
+  const cancelled = inMonth.filter(b => b.status === 'rejected')
+  const pending   = inMonth.filter(b => b.status === 'pending')
+  const revenue   = confirmed.reduce((sum, b) => sum + (b.services?.price_cents ?? 0), 0)
+
+  const totalConfirmed = bookings.filter(b => b.status === 'confirmed' || b.status === 'manual').length
+
+  const cardStyle = { background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, padding: '20px 22px' }
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <h1 style={{ fontFamily: FONT, fontSize: 26, fontWeight: 700, color: T.primary, letterSpacing: '-0.02em', lineHeight: 1.1, margin: 0 }}>Relatórios</h1>
-        <RefreshBtn onRefresh={onRefresh} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div>
+            <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5 }}>Mês</p>
+            <select value={selMonth} onChange={e => setSelMonth(e.target.value)}
+              style={{ padding: '9px 14px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, color: T.primary, fontFamily: FONT_MONO, fontSize: 12, cursor: 'pointer', minWidth: 180 }}>
+              {availableMonths.map(ym => (
+                <option key={ym} value={ym}>{fmtMonthLabel(ym)}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <RefreshBtn onRefresh={onRefresh} />
+          </div>
+        </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
+
+      {/* métricas do mês selecionado */}
+      <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.14em', marginBottom: 12 }}>
+        → {fmtMonthLabel(selMonth)}
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 32 }}>
         {[
-          ['Total este mês',        thisMonth.length,                                                      'agendamentos'],
-          ['Confirmados este mês',   confirmed.filter(b => b.date.startsWith(monthPfx)).length,            'agendamentos'],
-          ['Faturamento estimado',   fmtPrice(revenue),                                                    'este mês (confirmados)'],
-          ['Total geral',            bookings.filter(b => b.status === 'confirmed' || b.status === 'manual').length, 'agendamentos confirmados'],
-        ].map(([label, value, sub]) => (
-          <Card key={label}>
-            <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>{label}</p>
-            <p style={{ fontFamily: FONT_MONO, fontSize: 28, fontWeight: 600, color: ACCENT, marginBottom: 4 }}>{value}</p>
+          { label: 'Total de agendamentos', value: inMonth.length,    sub: 'no mês' },
+          { label: 'Confirmados',           value: confirmed.length,  sub: 'concluídos ou manuais' },
+          { label: 'Cancelados',            value: cancelled.length,  sub: 'rejeitados' },
+          { label: 'Pendentes',             value: pending.length,    sub: 'aguardando confirmação' },
+          { label: 'Faturamento estimado',  value: fmtPrice(revenue), sub: 'confirmados + manuais', accent: true },
+        ].map(({ label, value, sub, accent }) => (
+          <div key={label} style={{ ...cardStyle, ...(accent ? { border: `1px solid ${ACCENT}40`, background: `${ACCENT}08` } : {}) }}>
+            <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: accent ? ACCENT : T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>{label}</p>
+            <p style={{ fontFamily: FONT_MONO, fontSize: 30, fontWeight: 700, color: accent ? ACCENT : T.primary, marginBottom: 4, letterSpacing: '-0.02em' }}>{value}</p>
             <p style={{ fontFamily: FONT, fontSize: 12, color: T.muted }}>{sub}</p>
-          </Card>
+          </div>
         ))}
       </div>
-      <p style={{ fontFamily: FONT, fontSize: 13, color: T.hint }}>Relatórios detalhados em breve.</p>
+
+      {/* totais gerais */}
+      <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.14em', marginBottom: 12 }}>→ Total geral</p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
+        {[
+          { label: 'Agendamentos confirmados', value: totalConfirmed, sub: 'todos os tempos' },
+          { label: 'Faturamento total',        value: fmtPrice(bookings.filter(b => b.status === 'confirmed' || b.status === 'manual').reduce((s, b) => s + (b.services?.price_cents ?? 0), 0)), sub: 'todos os tempos' },
+        ].map(({ label, value, sub }) => (
+          <div key={label} style={cardStyle}>
+            <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>{label}</p>
+            <p style={{ fontFamily: FONT_MONO, fontSize: 30, fontWeight: 700, color: T.primary, marginBottom: 4, letterSpacing: '-0.02em' }}>{value}</p>
+            <p style={{ fontFamily: FONT, fontSize: 12, color: T.muted }}>{sub}</p>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
