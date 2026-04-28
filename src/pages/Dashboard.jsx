@@ -803,13 +803,26 @@ function ReportsSection({ bookings, onRefresh }) {
     return name.charAt(0).toUpperCase() + name.slice(1)
   }
 
+  // agendamento só entra no relatório se data+hora já passou
+  function alreadyOccurred(b) {
+    const now = new Date()
+    const slotDate = b.date
+    const todayStr = now.toISOString().split('T')[0]
+    if (slotDate < todayStr) return true
+    if (slotDate > todayStr) return false
+    // mesmo dia: compara a hora
+    const [h, m] = (b.hour ?? '23:59').split(':').map(Number)
+    const slot = new Date(now); slot.setHours(h, m, 0, 0)
+    return slot <= now
+  }
+
   const inMonth   = bookings.filter(b => b.date.startsWith(selMonth))
-  const confirmed = inMonth.filter(b => b.status === 'confirmed' || b.status === 'manual')
+  const confirmed = inMonth.filter(b => (b.status === 'confirmed' || b.status === 'manual') && alreadyOccurred(b))
   const cancelled = inMonth.filter(b => b.status === 'rejected')
-  const pending   = inMonth.filter(b => b.status === 'pending')
+  const pending   = inMonth.filter(b => b.status === 'pending' || ((b.status === 'confirmed' || b.status === 'manual') && !alreadyOccurred(b)))
   const revenue   = confirmed.reduce((sum, b) => sum + (b.services?.price_cents ?? 0), 0)
 
-  const totalConfirmed = bookings.filter(b => b.status === 'confirmed' || b.status === 'manual').length
+  const totalConfirmed = bookings.filter(b => (b.status === 'confirmed' || b.status === 'manual') && alreadyOccurred(b)).length
 
   const cardStyle = { background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, padding: '20px 22px' }
 
@@ -842,7 +855,7 @@ function ReportsSection({ bookings, onRefresh }) {
           { label: 'Total de agendamentos', value: inMonth.length,    sub: 'no mês' },
           { label: 'Confirmados',           value: confirmed.length,  sub: 'concluídos ou manuais' },
           { label: 'Cancelados',            value: cancelled.length,  sub: 'rejeitados' },
-          { label: 'Pendentes',             value: pending.length,    sub: 'aguardando confirmação' },
+          { label: 'Pendentes / Futuros',   value: pending.length,    sub: 'ainda não realizados' },
           { label: 'Faturamento estimado',  value: fmtPrice(revenue), sub: 'confirmados + manuais', accent: true },
         ].map(({ label, value, sub, accent }) => (
           <div key={label} style={{ ...cardStyle, ...(accent ? { border: `1px solid ${ACCENT}40`, background: `${ACCENT}08` } : {}) }}>
