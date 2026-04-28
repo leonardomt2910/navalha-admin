@@ -46,11 +46,12 @@ const TIME_SLOTS = Array.from({ length: 35 }, (_, i) => {
 })
 
 const NAV = [
-  { key: 'bookings', label: 'Agendamentos', short: 'Agenda',  icon: '◈' },
-  { key: 'calendar', label: 'Calendário',   short: 'Agenda',  icon: '▦' },
-  { key: 'reports',  label: 'Relatórios',   short: 'Relatos', icon: '▤' },
-  { key: 'settings', label: 'Configurações', short: 'Config', icon: '◎' },
-  { key: 'plans',    label: 'Planos',        short: 'Planos', icon: '◇' },
+  { key: 'bookings',     label: 'Agendamentos',  short: 'Agenda',  icon: '◈' },
+  { key: 'calendar',     label: 'Calendário',    short: 'Cal',     icon: '▦' },
+  { key: 'reports',      label: 'Relatórios',    short: 'Relatos', icon: '▤' },
+  { key: 'client-link',  label: 'Link do cliente', short: 'Link',  icon: '⇗' },
+  { key: 'settings',     label: 'Configurações', short: 'Config',  icon: '◎' },
+  { key: 'plans',        label: 'Planos',        short: 'Planos',  icon: '◇' },
 ]
 
 // ── hook responsivo ───────────────────────────────────────────────────────────
@@ -802,6 +803,41 @@ function ReportsSection({ bookings, onRefresh }) {
   )
 }
 
+// ── seção link do cliente ─────────────────────────────────────────────────────
+function ClientLinkSection({ owner, showToast }) {
+  const clientUrl = `${CLIENT_APP_URL}/${owner.slug}`
+
+  if (!owner.slug) return (
+    <div>
+      <PageTitle>Link do cliente</PageTitle>
+      <p style={{ fontFamily: FONT, fontSize: 13, color: T.hint }}>Configure um slug em Configurações para gerar seu link.</p>
+    </div>
+  )
+
+  return (
+    <div style={{ maxWidth: 480 }}>
+      <PageTitle>Link do cliente</PageTitle>
+      <p style={{ fontFamily: FONT, fontSize: 14, color: T.muted, marginBottom: 24 }}>
+        Compartilhe este link para seus clientes fazerem agendamentos.
+      </p>
+      <div style={{ background: `${ACCENT}12`, border: `1px solid ${ACCENT}40`, borderRadius: RADIUS, padding: '20px 22px' }}>
+        <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: ACCENT, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 10 }}>Link de agendamento</p>
+        <p style={{ fontFamily: FONT_MONO, fontSize: 13, color: T.primary, wordBreak: 'break-all', marginBottom: 18 }}>{clientUrl}</p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => navigator.clipboard?.writeText(clientUrl).then(() => showToast('Link copiado.'))}
+            style={{ background: ACCENT, border: 'none', borderRadius: RADIUS - 4, padding: '10px 20px', color: INK, fontFamily: FONT_MONO, fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer' }}>
+            Copiar
+          </button>
+          <a href={clientUrl} target="_blank" rel="noreferrer"
+            style={{ border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS - 4, padding: '9px 16px', color: T.muted, fontFamily: FONT_MONO, fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+            Abrir
+          </a>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── seção configurações ───────────────────────────────────────────────────────
 function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServicesChange, onHoursChange, showToast }) {
   const [tab, setTab] = useState('profile')
@@ -958,23 +994,6 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
       {/* PERFIL */}
       {tab === 'profile' && (
         <div style={{ maxWidth: 480 }}>
-          {/* card do link do cliente */}
-          <div style={{ background: `${ACCENT}12`, border: `1px solid ${ACCENT}40`, borderRadius: RADIUS, padding: '16px 18px', marginBottom: 24 }}>
-            <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: ACCENT, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>Link dos clientes</p>
-            <p style={{ fontFamily: FONT, fontSize: 12, color: T.muted, marginBottom: 10 }}>Compartilhe este link para seus clientes fazerem agendamentos.</p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.primary, wordBreak: 'break-all', flex: 1 }}>{clientUrl}</span>
-              <button onClick={() => navigator.clipboard?.writeText(clientUrl).then(() => showToast('Link copiado.'))}
-                style={{ background: ACCENT, border: 'none', borderRadius: RADIUS - 4, padding: '7px 14px', color: INK, fontFamily: FONT_MONO, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                Copiar
-              </button>
-              <a href={clientUrl} target="_blank" rel="noreferrer"
-                style={{ border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS - 4, padding: '6px 12px', color: T.muted, fontFamily: FONT_MONO, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, textDecoration: 'none' }}>
-                Abrir
-              </a>
-            </div>
-          </div>
-
           <Input label="Nome da barbearia" value={profName} onChange={e => setProfName(e.target.value)} placeholder="Barbearia do João" />
           <Input label="Slug (URL)" value={profSlug}
             onChange={e => setProfSlug(softSlugify(e.target.value))}
@@ -1253,6 +1272,9 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
         )}
         {section === 'reports' && (
           <ReportsSection bookings={bookings} onRefresh={loadBookings} />
+        )}
+        {section === 'client-link' && (
+          <ClientLinkSection owner={owner} showToast={showToast} />
         )}
         {section === 'settings' && (
           <SettingsSection
