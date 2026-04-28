@@ -123,35 +123,49 @@ function SettingsTabs({ active, onChange }) {
 // ── seção planos ──────────────────────────────────────────────────────────────
 const PLANS = [
   {
-    key: 'essencial',
-    name: 'Essencial',
+    key: 'start',
+    name: 'Start',
     price: 'R$ 69',
     period: '/mês',
-    target: 'Barbearia com 1–3 cadeiras, dono que quer parar de usar caderno e WhatsApp.',
+    target: 'Solo — 1 barbeiro que quer parar de usar caderno e WhatsApp.',
     highlight: false,
     features: [
       'Agendamento online 24h',
-      'Link de agendamento personalizado',
-      'Lembrete automático via WhatsApp com confirmação',
-      'Liberação automática de horário se cliente não confirmar',
-      'Cadastro ilimitado de clientes, serviços e profissionais',
-      'Financeiro básico (caixa diário)',
-      'Acesso web — computador, celular, tablet',
-      'Suporte por WhatsApp',
+      'Link público de agendamento',
+      'Confirmação automática via WhatsApp',
+      'Lembrete pré-horário via WhatsApp',
+      '1 barbeiro',
+      'Relatórios básicos',
+      'Suporte por chat',
     ],
   },
   {
-    key: 'profissional',
-    name: 'Profissional',
-    price: 'R$ 129',
+    key: 'pro',
+    name: 'Pro',
+    price: 'R$ 119',
     period: '/mês',
-    target: 'Barbearia com 3+ cadeiras, dono que quer profissionalizar a marca e ter visão do negócio.',
+    target: 'Até 4 barbeiros — dono que quer profissionalizar a operação.',
     highlight: true,
     features: [
-      'Tudo do plano Essencial',
-      'Dashboard completo — taxa de retorno, ticket médio por barbeiro, horários ociosos, top 10 clientes',
-      'Relatórios mensais automáticos por e-mail',
-      'Suporte prioritário por WhatsApp',
+      'Tudo do Start',
+      'Lembrete para clientes sem cortar há 45 dias',
+      'Até 4 barbeiros',
+      'Relatórios completos',
+      'Suporte prioritário',
+    ],
+  },
+  {
+    key: 'scale',
+    name: 'Scale',
+    price: 'R$ 219',
+    period: '/mês',
+    target: '5+ barbeiros ou redes — para quem está crescendo.',
+    highlight: false,
+    features: [
+      'Tudo do Pro',
+      'Barbeiros ilimitados',
+      'Relatórios completos + exportação',
+      'Suporte dedicado',
     ],
   },
 ]
@@ -167,8 +181,8 @@ const ADDON = {
 const SUPABASE_FUNCTIONS_URL = 'https://grgfmzueciolmdjeufwz.supabase.co/functions/v1'
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdyZ2ZtenVlY2lvbG1kamV1Znd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNjQxMzksImV4cCI6MjA5MjY0MDEzOX0.lOYdvtdkXCYlYxjvJLjNZvZAoal0JW9yjaq-zLgmuNA'
 
-const PLAN_LABEL = { free: 'Gratuito', pro: 'Essencial', premium: 'Profissional' }
-const PLAN_KEY_MAP = { essencial: 'pro', profissional: 'premium' }
+const PLAN_LABEL = { free: 'Gratuito', pro: 'Start', premium: 'Pro', scale: 'Scale' }
+const PLAN_KEY_MAP = { start: 'pro', pro: 'premium', scale: 'scale' }
 
 function CpfCnpjModal({ onConfirm, onClose }) {
   const [doc, setDoc] = useState('')
