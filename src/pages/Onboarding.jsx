@@ -124,8 +124,10 @@ export default function Onboarding({ owner, onComplete }) {
     try {
       const rawPhone  = whatsapp.replace(/\D/g, '')
       const rawCpfCnpj = cpfCnpj.replace(/\D/g, '')
+      const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
       const { error: e1 } = await supabase.from('owners').update({
         name: barbName.trim(), slug, whatsapp: rawPhone, cpf_cnpj: rawCpfCnpj, active: true,
+        trial_ends_at: trialEndsAt,
       }).eq('id', owner.id)
       if (e1) throw e1
 

@@ -1124,6 +1124,33 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
   const [loading,     setLoading]     = useState(true)
   const [toast,       setToast]       = useState(null)
 
+  // ── trial ──────────────────────────────────────────────────────────────────
+  const [now, setNow]           = useState(() => new Date())
+  const deactivatedRef          = useRef(false)
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(t)
+  }, [])
+
+  const isPaidPlan   = owner.plan && owner.plan !== 'free'
+  const trialEndsAt  = owner.trial_ends_at ? new Date(owner.trial_ends_at) : null
+  const trialExpired = !isPaidPlan && trialEndsAt && trialEndsAt < now
+  const trialActive  = !isPaidPlan && trialEndsAt && trialEndsAt >= now
+  const msLeft       = trialEndsAt ? Math.max(0, trialEndsAt - now) : 0
+  const trialDays    = Math.floor(msLeft / 86400000)
+  const trialHours   = Math.floor((msLeft % 86400000) / 3600000)
+  const trialMins    = Math.floor((msLeft % 3600000) / 60000)
+  const trialSecs    = Math.floor((msLeft % 60000) / 1000)
+
+  // desativa owner no Supabase ao expirar o trial
+  useEffect(() => {
+    if (trialExpired && !deactivatedRef.current) {
+      deactivatedRef.current = true
+      supabase.from('owners').update({ active: false }).eq('id', owner.id)
+    }
+  }, [trialExpired, owner.id])
+
   function showToast(msg, type = 'success') {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3500)
@@ -1208,6 +1235,21 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
             </button>
           </div>
         )}
+        {/* timer de trial */}
+        {(trialActive || trialExpired) && (
+          <div style={{ marginBottom: 12, padding: '10px 12px', borderRadius: RADIUS, background: trialExpired ? 'rgba(239,68,68,0.1)' : 'rgba(235,188,99,0.08)', border: `1px solid ${trialExpired ? 'rgba(239,68,68,0.3)' : HAIRLINE}` }}>
+            <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: trialExpired ? '#F87171' : T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>
+              {trialExpired ? 'Trial encerrado' : 'Trial gratuito'}
+            </p>
+            {trialExpired ? (
+              <p style={{ fontFamily: FONT, fontSize: 12, color: '#F87171', lineHeight: 1.4 }}>Assine um plano para continuar.</p>
+            ) : (
+              <p style={{ fontFamily: FONT_MONO, fontSize: 13, fontWeight: 700, color: trialDays < 2 ? '#FBBF24' : T.primary, letterSpacing: '0.04em' }}>
+                {trialDays}d {String(trialHours).padStart(2,'0')}h {String(trialMins).padStart(2,'0')}m {String(trialSecs).padStart(2,'0')}s
+              </p>
+            )}
+          </div>
+        )}
         <GhostBtn onClick={onSignOut} style={{ fontSize: 12, color: '#F87171' }}>Sair</GhostBtn>
       </div>
     </div>
@@ -1243,7 +1285,40 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
     <div style={{ display: 'flex', minHeight: '100vh', flexDirection: isMobile ? 'column' : 'row' }}>
       {!isMobile && Sidebar}
       {TopBar}
-      <main style={{ flex: 1, padding: isMobile ? '20px 16px' : '32px 36px', overflowY: 'auto', maxWidth: isMobile ? undefined : section === 'calendar' ? undefined : 900, paddingBottom: isMobile ? 80 : 32 }}>
+      {/* faixa de trial — mobile */}
+      {isMobile && (trialActive || trialExpired) && (
+        <div style={{ background: trialExpired ? 'rgba(239,68,68,0.12)' : 'rgba(235,188,99,0.08)', borderBottom: `1px solid ${trialExpired ? 'rgba(239,68,68,0.3)' : HAIRLINE}`, padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: trialExpired ? '#F87171' : T.hint, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+            {trialExpired ? 'Trial encerrado' : 'Trial gratuito'}
+          </p>
+          {trialActive && (
+            <p style={{ fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700, color: trialDays < 2 ? '#FBBF24' : T.primary }}>
+              {trialDays}d {String(trialHours).padStart(2,'0')}h {String(trialMins).padStart(2,'0')}m {String(trialSecs).padStart(2,'0')}s
+            </p>
+          )}
+          {trialExpired && (
+            <button onClick={() => setSection('plans')} style={{ background: 'transparent', border: `1px solid rgba(239,68,68,0.4)`, borderRadius: 6, padding: '3px 10px', color: '#F87171', fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer' }}>Ver planos</button>
+          )}
+        </div>
+      )}
+      <main style={{ flex: 1, padding: isMobile ? '20px 16px' : '32px 36px', overflowY: 'auto', maxWidth: isMobile ? undefined : section === 'calendar' ? undefined : 900, paddingBottom: isMobile ? 80 : 32, position: 'relative' }}>
+        {/* paywall de trial expirado */}
+        {trialExpired && section !== 'plans' && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(17,12,8,0.92)', backdropFilter: 'blur(6px)', padding: 32 }}>
+            <div style={{ maxWidth: 420, textAlign: 'center' }}>
+              <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: '#F87171', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 16 }}>→ PERÍODO DE AVALIAÇÃO ENCERRADO</p>
+              <h2 style={{ fontFamily: FONT, fontSize: 26, fontWeight: 700, color: T.primary, marginBottom: 12, letterSpacing: '-0.02em' }}>Seus 14 dias gratuitos acabaram.</h2>
+              <p style={{ fontFamily: FONT, fontSize: 14, color: T.muted, lineHeight: 1.6, marginBottom: 32 }}>
+                O acesso ao painel e o link de agendamento dos clientes foram suspensos. Assine um plano para reativar tudo imediatamente.
+              </p>
+              <button onClick={() => setSection('plans')}
+                style={{ background: ACCENT, border: 'none', borderRadius: RADIUS, padding: '14px 32px', color: INK, fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', cursor: 'pointer' }}>
+                Ver planos
+              </button>
+            </div>
+          </div>
+        )}
+
         {section === 'bookings' && (
           <BookingsSection bookings={bookings} loading={loading} updateStatus={updateStatus} deleteBooking={deleteBooking} onRefresh={loadBookings} />
         )}
