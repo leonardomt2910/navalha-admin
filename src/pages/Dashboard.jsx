@@ -170,14 +170,6 @@ const PLANS = [
   },
 ]
 
-const ADDON = {
-  name: 'Reativação Inteligente',
-  price: '+R$ 39',
-  period: '/mês',
-  badge: 'Add-on',
-  description: 'Disponível em qualquer plano. O sistema identifica clientes que não voltam há 30, 45 ou 60 dias e dispara mensagem automática via WhatsApp.',
-}
-
 const SUPABASE_FUNCTIONS_URL = 'https://grgfmzueciolmdjeufwz.supabase.co/functions/v1'
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdyZ2ZtenVlY2lvbG1kamV1Znd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNjQxMzksImV4cCI6MjA5MjY0MDEzOX0.lOYdvtdkXCYlYxjvJLjNZvZAoal0JW9yjaq-zLgmuNA'
 
@@ -295,7 +287,7 @@ function PlansSection({ owner }) {
       </p>
 
       {/* cards de plano */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 16 }}>
         {PLANS.map(plan => {
           const active = isActive(plan.key)
           const busy   = loading === plan.key
@@ -370,32 +362,6 @@ function PlansSection({ owner }) {
         })}
       </div>
 
-      {/* add-on */}
-      <div style={{ background: INK2, border: `1px dashed ${HAIRLINE}`, borderRadius: RADIUS, padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ background: 'rgba(235,188,99,0.12)', border: `1px solid rgba(235,188,99,0.3)`, borderRadius: 6, padding: '2px 8px', fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: ACCENT }}>{ADDON.badge}</div>
-          <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: T.primary }}>{ADDON.name}</p>
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'baseline', gap: 2 }}>
-            <span style={{ fontFamily: FONT_MONO, fontSize: 18, fontWeight: 700, color: T.primary }}>{ADDON.price}</span>
-            <span style={{ fontFamily: FONT_MONO, fontSize: 12, color: T.hint }}>{ADDON.period}</span>
-          </div>
-        </div>
-        <p style={{ fontFamily: FONT, fontSize: 13, color: T.muted, lineHeight: 1.6, maxWidth: 600 }}>{ADDON.description}</p>
-        <button
-          onClick={() => handleSubscribe('addon')}
-          disabled={owner?.addon_reativacao || loading === 'addon'}
-          style={{
-            alignSelf: 'flex-start', padding: '9px 20px',
-            background: 'transparent', border: `1px solid ${owner?.addon_reativacao ? ACCENT : HAIRLINE}`,
-            borderRadius: RADIUS, color: owner?.addon_reativacao ? ACCENT : T.primary,
-            fontFamily: FONT, fontWeight: 600, fontSize: 13,
-            cursor: owner?.addon_reativacao ? 'default' : 'pointer',
-            opacity: loading === 'addon' ? 0.6 : 1,
-          }}
-        >
-          {owner?.addon_reativacao ? 'Add-on ativo' : loading === 'addon' ? 'Aguarde...' : 'Adicionar ao plano'}
-        </button>
-      </div>
     </div>
   )
 }
