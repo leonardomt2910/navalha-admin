@@ -1225,19 +1225,9 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
       <div style={{ padding: '16px 20px', borderTop: `1px solid ${HAIRLINE}` }}>
         <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Barbearia</p>
         <p style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: T.primary, marginBottom: 2 }}>{owner.name}</p>
-        {owner.slug && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-            <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>/{owner.slug}</p>
-            <button title="Copiar link dos clientes"
-              onClick={() => navigator.clipboard?.writeText(`${CLIENT_APP_URL}/${owner.slug}`).then(() => showToast('Link copiado.'))}
-              style={{ background: 'transparent', border: `1px solid ${HAIRLINE}`, borderRadius: 6, padding: '3px 8px', color: ACCENT, fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer', flexShrink: 0 }}>
-              copiar link
-            </button>
-          </div>
-        )}
         {/* timer de trial */}
         {(trialActive || trialExpired) && (
-          <div style={{ marginBottom: 12, padding: '10px 12px', borderRadius: RADIUS, background: trialExpired ? 'rgba(239,68,68,0.1)' : 'rgba(235,188,99,0.08)', border: `1px solid ${trialExpired ? 'rgba(239,68,68,0.3)' : HAIRLINE}` }}>
+          <div style={{ marginBottom: 10, padding: '10px 12px', borderRadius: RADIUS, background: trialExpired ? 'rgba(239,68,68,0.1)' : 'rgba(235,188,99,0.08)', border: `1px solid ${trialExpired ? 'rgba(239,68,68,0.3)' : HAIRLINE}` }}>
             <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: trialExpired ? '#F87171' : T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>
               {trialExpired ? 'Trial encerrado' : 'Trial gratuito'}
             </p>
@@ -1248,6 +1238,16 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
                 {trialDays}d {String(trialHours).padStart(2,'0')}h {String(trialMins).padStart(2,'0')}m {String(trialSecs).padStart(2,'0')}s
               </p>
             )}
+          </div>
+        )}
+        {owner.slug && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+            <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>/{owner.slug}</p>
+            <button title="Copiar link dos clientes"
+              onClick={() => navigator.clipboard?.writeText(`${CLIENT_APP_URL}/${owner.slug}`).then(() => showToast('Link copiado.'))}
+              style={{ background: 'transparent', border: `1px solid ${HAIRLINE}`, borderRadius: 6, padding: '3px 8px', color: ACCENT, fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer', flexShrink: 0 }}>
+              copiar link
+            </button>
           </div>
         )}
         <GhostBtn onClick={onSignOut} style={{ fontSize: 12, color: '#F87171' }}>Sair</GhostBtn>
