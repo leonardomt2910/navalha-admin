@@ -97,12 +97,15 @@ export default function Onboarding({ owner, onComplete }) {
   const [slugStatus, setSlugStatus] = useState('idle')
   const slugTimer = useRef(null)
 
-  // step 2
+  // step 2 — equipe
+  const [professionals, setProfessionals] = useState([{ _id: Math.random(), name: '' }])
+
+  // step 3 — serviços
   const [services, setServices] = useState(DEFAULT_SERVICES.map(s => ({ ...s, _id: Math.random() })))
   const [editIdx, setEditIdx]   = useState(null)
   const [editForm, setEditForm] = useState({})
 
-  // step 3
+  // step 4 — horários
   const [hours, setHours] = useState(DEFAULT_HOURS)
 
   // ── validação de slug ────────────────────────────────────────────────────────
@@ -122,7 +125,7 @@ export default function Onboarding({ owner, onComplete }) {
     setError('')
     setSaving(true)
     try {
-      const rawPhone  = whatsapp.replace(/\D/g, '')
+      const rawPhone   = whatsapp.replace(/\D/g, '')
       const rawCpfCnpj = cpfCnpj.replace(/\D/g, '')
       const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
       const { error: e1 } = await supabase.from('owners').update({
@@ -131,11 +134,20 @@ export default function Onboarding({ owner, onComplete }) {
       }).eq('id', owner.id)
       if (e1) throw e1
 
+      // profissionais
+      const pros = professionals
+        .filter(p => p.name.trim())
+        .map((p, i) => ({ owner_id: owner.id, name: p.name.trim(), sort_order: i, active: true }))
+      if (pros.length > 0) {
+        const { error: e2 } = await supabase.from('professionals').insert(pros)
+        if (e2) throw e2
+      }
+
       const svcs = services.map(({ name, price_cents, duration_min }, i) => ({
         owner_id: owner.id, name, price_cents, duration_min, sort_order: i,
       }))
-      const { error: e2 } = await supabase.from('services').insert(svcs)
-      if (e2) throw e2
+      const { error: e3 } = await supabase.from('services').insert(svcs)
+      if (e3) throw e3
 
       const hrs = Object.entries(hours).map(([wd, cfg]) => ({
         owner_id: owner.id, weekday: parseInt(wd), open: cfg.open,
@@ -145,8 +157,8 @@ export default function Onboarding({ owner, onComplete }) {
         afternoon_end:    cfg.open ? cfg.afternoon_end    || null : null,
         blocked_ranges:   cfg.open ? (cfg.blocked_ranges || []).filter(r => r.start && r.end) : [],
       }))
-      const { error: e3 } = await supabase.from('hours_config').insert(hrs)
-      if (e3) throw e3
+      const { error: e4 } = await supabase.from('hours_config').insert(hrs)
+      if (e4) throw e4
 
       onComplete({ ...owner, name: barbName.trim(), slug, whatsapp: rawPhone, cpf_cnpj: rawCpfCnpj })
     } catch (err) {
@@ -156,7 +168,18 @@ export default function Onboarding({ owner, onComplete }) {
     }
   }
 
-  // ── helpers step 2 ───────────────────────────────────────────────────────────
+  // ── helpers equipe ────────────────────────────────────────────────────────────
+  function addPro() {
+    setProfessionals(p => [...p, { _id: Math.random(), name: '' }])
+  }
+  function removePro(id) {
+    setProfessionals(p => p.filter(x => x._id !== id))
+  }
+  function updatePro(id, name) {
+    setProfessionals(p => p.map(x => x._id === id ? { ...x, name } : x))
+  }
+
+  // ── helpers serviços ─────────────────────────────────────────────────────────
   function startEdit(idx) {
     setEditIdx(idx)
     setEditForm({ ...services[idx], priceDisplay: centsToReal(services[idx].price_cents) })
@@ -198,13 +221,13 @@ export default function Onboarding({ owner, onComplete }) {
   // ── barra de progresso ───────────────────────────────────────────────────────
   const progress = (
     <div style={{ display: 'flex', gap: 6, marginBottom: 32 }}>
-      {[1, 2, 3].map(n => (
+      {[1, 2, 3, 4].map(n => (
         <div key={n} style={{ flex: 1, height: 3, borderRadius: 2, background: n <= step ? ACCENT : HAIRLINE, transition: 'background 0.3s' }} />
       ))}
     </div>
   )
 
-  // ── step 1 ───────────────────────────────────────────────────────────────────
+  // ── step 1 — dados da barbearia ──────────────────────────────────────────────
   const slugHint = {
     idle:      slug.length > 0 && slug.length < 3 ? 'Mínimo 3 caracteres.' : 'Esta será a URL pública do seu app de agendamento.',
     checking:  'Verificando disponibilidade...',
@@ -217,7 +240,7 @@ export default function Onboarding({ owner, onComplete }) {
 
   const renderStep1 = (
     <>
-      <Eyebrow>Passo 1 de 3</Eyebrow>
+      <Eyebrow>Passo 1 de 4</Eyebrow>
       <h2 style={{ fontFamily: FONT, fontSize: 22, fontWeight: 700, color: T.primary, marginBottom: 24, letterSpacing: '-0.02em' }}>Dados da barbearia.</h2>
       <Input label="Nome da barbearia" placeholder="Barbearia do João" value={barbName} onChange={e => setBarbName(e.target.value)} />
       <Input
@@ -250,10 +273,46 @@ export default function Onboarding({ owner, onComplete }) {
     </>
   )
 
-  // ── step 2 ───────────────────────────────────────────────────────────────────
+  // ── step 2 — equipe ──────────────────────────────────────────────────────────
+  const step2Valid = professionals.length > 0 && professionals.every(p => p.name.trim().length > 0)
+
   const renderStep2 = (
     <>
-      <Eyebrow>Passo 2 de 3</Eyebrow>
+      <Eyebrow>Passo 2 de 4</Eyebrow>
+      <h2 style={{ fontFamily: FONT, fontSize: 22, fontWeight: 700, color: T.primary, marginBottom: 8, letterSpacing: '-0.02em' }}>Sua equipe.</h2>
+      <p style={{ fontFamily: FONT, fontSize: 13, color: T.hint, marginBottom: 24 }}>Cadastre ao menos um profissional. Você pode adicionar mais depois nas configurações.</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+        {professionals.map((pro) => (
+          <div key={pro._id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <input
+                placeholder="Nome do profissional"
+                value={pro.name}
+                onChange={e => updatePro(pro._id, e.target.value)}
+                style={{ width: '100%', padding: '12px 14px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, color: T.primary, fontFamily: FONT, fontSize: 14, boxSizing: 'border-box', outline: 'none' }}
+              />
+            </div>
+            {professionals.length > 1 && (
+              <button onClick={() => removePro(pro._id)}
+                style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: `1px solid rgba(248,113,113,0.3)`, borderRadius: RADIUS - 4, cursor: 'pointer', color: '#F87171', fontSize: 16, flexShrink: 0 }}>
+                ×
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      <GhostBtn onClick={addPro} style={{ marginBottom: 24, color: ACCENT }}>+ Adicionar profissional</GhostBtn>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <SecBtn onClick={() => setStep(1)} style={{ flex: 1 }}>Voltar</SecBtn>
+        <PrimaryBtn disabled={!step2Valid} onClick={() => setStep(3)} style={{ flex: 2 }}>Continuar</PrimaryBtn>
+      </div>
+    </>
+  )
+
+  // ── step 3 — serviços ────────────────────────────────────────────────────────
+  const renderStep3 = (
+    <>
+      <Eyebrow>Passo 3 de 4</Eyebrow>
       <h2 style={{ fontFamily: FONT, fontSize: 22, fontWeight: 700, color: T.primary, marginBottom: 24, letterSpacing: '-0.02em' }}>Configure seus serviços.</h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
         {services.map((svc, idx) => (
@@ -285,16 +344,16 @@ export default function Onboarding({ owner, onComplete }) {
       </div>
       <GhostBtn onClick={addService} style={{ marginBottom: 24, color: ACCENT }}>+ Adicionar serviço</GhostBtn>
       <div style={{ display: 'flex', gap: 8 }}>
-        <SecBtn onClick={() => setStep(1)} style={{ flex: 1 }}>Voltar</SecBtn>
-        <PrimaryBtn disabled={services.length === 0 || editIdx !== null} onClick={() => setStep(3)} style={{ flex: 2 }}>Continuar</PrimaryBtn>
+        <SecBtn onClick={() => setStep(2)} style={{ flex: 1 }}>Voltar</SecBtn>
+        <PrimaryBtn disabled={services.length === 0 || editIdx !== null} onClick={() => setStep(4)} style={{ flex: 2 }}>Continuar</PrimaryBtn>
       </div>
     </>
   )
 
-  // ── step 3 ───────────────────────────────────────────────────────────────────
-  const renderStep3 = (
+  // ── step 4 — horários ────────────────────────────────────────────────────────
+  const renderStep4 = (
     <>
-      <Eyebrow>Passo 3 de 3</Eyebrow>
+      <Eyebrow>Passo 4 de 4</Eyebrow>
       <h2 style={{ fontFamily: FONT, fontSize: 22, fontWeight: 700, color: T.primary, marginBottom: 8, letterSpacing: '-0.02em' }}>Configure seus horários.</h2>
       <p style={{ fontFamily: FONT, fontSize: 13, color: T.hint, marginBottom: 24 }}>Defina os horários de funcionamento e bloqueie períodos específicos.</p>
 
@@ -362,7 +421,7 @@ export default function Onboarding({ owner, onComplete }) {
 
       {error && <p style={{ fontFamily: FONT, fontSize: 13, color: '#F87171', marginBottom: 16 }}>{error}</p>}
       <div style={{ display: 'flex', gap: 8 }}>
-        <SecBtn onClick={() => setStep(2)} style={{ flex: 1 }}>Voltar</SecBtn>
+        <SecBtn onClick={() => setStep(3)} style={{ flex: 1 }}>Voltar</SecBtn>
         <PrimaryBtn disabled={saving} onClick={handleComplete} style={{ flex: 2 }}>
           {saving ? 'Salvando...' : 'Concluir configuração'}
         </PrimaryBtn>
@@ -381,6 +440,7 @@ export default function Onboarding({ owner, onComplete }) {
           {step === 1 && renderStep1}
           {step === 2 && renderStep2}
           {step === 3 && renderStep3}
+          {step === 4 && renderStep4}
         </Card>
       </div>
     </div>

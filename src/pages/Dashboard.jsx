@@ -111,7 +111,7 @@ function Toggle({ on, onChange }) {
 function SettingsTabs({ active, onChange }) {
   return (
     <div style={{ display: 'flex', gap: 4, marginBottom: 28, background: INK2, borderRadius: RADIUS, padding: 4, border: `1px solid ${HAIRLINE}` }}>
-      {[['profile', 'Perfil'], ['services', 'Serviços'], ['hours', 'Horários']].map(([key, label]) => (
+      {[['profile', 'Perfil'], ['services', 'Serviços'], ['hours', 'Horários'], ['team', 'Equipe']].map(([key, label]) => (
         <button key={key} onClick={() => onChange(key)} style={{ flex: 1, padding: '8px 12px', borderRadius: RADIUS - 4, border: 'none', cursor: 'pointer', background: active === key ? ACCENT : 'transparent', color: active === key ? INK : T.muted, fontFamily: FONT, fontWeight: active === key ? 700 : 400, fontSize: 13, transition: 'all 0.15s' }}>
           {label}
         </button>
@@ -367,7 +367,7 @@ function PlansSection({ owner }) {
 }
 
 // ── seção agendamentos ─────────────────────────────────────────────────────────
-function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRefresh }) {
+function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRefresh, professionals }) {
   const isMobile = useIsMobile()
   const [filterDate,   setFilterDate]   = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
@@ -381,6 +381,11 @@ function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRef
 
   const thStyle = { fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', padding: '10px 16px', textAlign: 'left', borderBottom: `1px solid ${HAIRLINE}`, whiteSpace: 'nowrap' }
   const tdStyle = { padding: '14px 16px', fontFamily: FONT, fontSize: 13, color: T.primary, borderBottom: `1px solid ${HAIRLINE}` }
+
+  function proName(b) {
+    if (!b.professional_id) return null
+    return professionals?.find(p => p.id === b.professional_id)?.name ?? null
+  }
 
   return (
     <div>
@@ -416,7 +421,7 @@ function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRef
               <div style={{ fontFamily: FONT_MONO, fontSize: 16, fontWeight: 600, color: ACCENT, minWidth: 48 }}>{b.hour?.slice(0, 5)}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary, marginBottom: 2 }}>{b.client_name}</p>
-                <p style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.muted }}>{b.services?.name ?? '—'} · {new Date(b.date + 'T12:00:00').toLocaleDateString('pt-BR')} · {phoneToDisplay(b.client_phone)}</p>
+                <p style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.muted }}>{b.services?.name ?? '—'}{proName(b) ? ` · ${proName(b)}` : ''} · {new Date(b.date + 'T12:00:00').toLocaleDateString('pt-BR')} · {phoneToDisplay(b.client_phone)}</p>
               </div>
               <Badge status={b.status} />
             </div>
@@ -430,6 +435,7 @@ function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRef
                 <th style={thStyle}>Horário</th>
                 <th style={thStyle}>Cliente</th>
                 <th style={thStyle}>Serviço</th>
+                {professionals?.length > 1 && <th style={thStyle}>Profissional</th>}
                 <th style={thStyle}>Data</th>
                 <th style={thStyle}>Telefone</th>
                 <th style={thStyle}>Status</th>
@@ -444,6 +450,7 @@ function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRef
                   <td style={{ ...tdStyle, fontFamily: FONT_MONO, fontSize: 14, fontWeight: 700, color: ACCENT }}>{b.hour?.slice(0, 5)}</td>
                   <td style={{ ...tdStyle, fontWeight: 600 }}>{b.client_name}</td>
                   <td style={{ ...tdStyle, color: T.muted }}>{b.services?.name ?? '—'}</td>
+                  {professionals?.length > 1 && <td style={{ ...tdStyle, color: T.muted }}>{proName(b) ?? '—'}</td>}
                   <td style={{ ...tdStyle, fontFamily: FONT_MONO, fontSize: 12, color: T.muted }}>{new Date(b.date + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
                   <td style={{ ...tdStyle, fontFamily: FONT_MONO, fontSize: 12, color: T.muted }}>{phoneToDisplay(b.client_phone)}</td>
                   <td style={tdStyle}><Badge status={b.status} /></td>
@@ -461,12 +468,13 @@ function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRef
             <h3 style={{ fontFamily: FONT, fontSize: 20, fontWeight: 700, color: T.primary, marginBottom: 20 }}>{detail.client_name}</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
               {[
-                ['Serviço',  detail.services?.name ?? '—'],
-                ['Data',     fmtDateFull(detail.date)],
-                ['Horário',  detail.hour?.slice(0, 5)],
-                ['Telefone', detail.client_phone],
-                ['Status',   <Badge key="s" status={detail.status} />],
-                detail.notes && ['Obs.', detail.notes],
+                ['Serviço',       detail.services?.name ?? '—'],
+                proName(detail) ? ['Profissional', proName(detail)] : null,
+                ['Data',          fmtDateFull(detail.date)],
+                ['Horário',       detail.hour?.slice(0, 5)],
+                ['Telefone',      detail.client_phone],
+                ['Status',        <Badge key="s" status={detail.status} />],
+                detail.notes ? ['Obs.', detail.notes] : null,
               ].filter(Boolean).map(([label, value]) => (
                 <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
                   <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</span>
@@ -922,7 +930,7 @@ function ClientLinkSection({ owner, showToast }) {
 }
 
 // ── seção configurações ───────────────────────────────────────────────────────
-function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServicesChange, onHoursChange, showToast }) {
+function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerUpdate, onServicesChange, onHoursChange, onProfessionalsChange, showToast }) {
   const [tab, setTab] = useState('profile')
 
   // ── perfil ─────────────────────────────────────────────────────────────────
@@ -1068,6 +1076,57 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
 
   const labelStyle = { fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }
 
+  // ── equipe ─────────────────────────────────────────────────────────────────
+  const [localPros,   setLocalPros]   = useState(professionals ?? [])
+  const [proEditIdx,  setProEditIdx]  = useState(null)
+  const [proEditName, setProEditName] = useState('')
+  const [proSaving,   setProSaving]   = useState(false)
+
+  useEffect(() => { setLocalPros(professionals ?? []) }, [professionals])
+
+  async function savePro() {
+    if (!proEditName.trim()) return
+    setProSaving(true)
+    const pro = localPros[proEditIdx]
+    if (pro?.id) {
+      const { error } = await supabase.from('professionals').update({ name: proEditName.trim() }).eq('id', pro.id)
+      if (error) { showToast('Erro ao salvar.', 'error'); setProSaving(false); return }
+    } else {
+      const { data, error } = await supabase.from('professionals')
+        .insert({ owner_id: owner.id, name: proEditName.trim(), sort_order: localPros.length, active: true })
+        .select().single()
+      if (error) { showToast('Erro ao salvar.', 'error'); setProSaving(false); return }
+      const next = [...localPros]; next[proEditIdx] = data; setLocalPros(next)
+      onProfessionalsChange(); setProEditIdx(null); setProSaving(false); return
+    }
+    setProSaving(false); onProfessionalsChange(); setProEditIdx(null)
+    showToast('Profissional salvo.')
+  }
+
+  async function toggleProActive(pro) {
+    await supabase.from('professionals').update({ active: !pro.active }).eq('id', pro.id)
+    onProfessionalsChange()
+    showToast(pro.active ? 'Profissional desativado.' : 'Profissional ativado.')
+  }
+
+  async function removePro(pro) {
+    if (!confirm(`Remover "${pro.name}"?`)) return
+    if (pro.id) {
+      const { error } = await supabase.from('professionals').delete().eq('id', pro.id)
+      if (error) { showToast('Erro ao remover.', 'error'); return }
+    }
+    setLocalPros(p => p.filter(x => x.id !== pro.id))
+    if (proEditIdx !== null) setProEditIdx(null)
+    onProfessionalsChange(); showToast('Profissional removido.')
+  }
+
+  function addPro() {
+    const blank = { name: '', active: true }
+    setLocalPros(p => [...p, blank])
+    setProEditIdx(localPros.length)
+    setProEditName('')
+  }
+
   // ── render ─────────────────────────────────────────────────────────────────
   return (
     <div>
@@ -1212,6 +1271,41 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
           </PrimaryBtn>
         </div>
       )}
+
+      {/* EQUIPE */}
+      {tab === 'team' && (
+        <div style={{ maxWidth: 480 }}>
+          <p style={{ fontFamily: FONT, fontSize: 13, color: T.muted, marginBottom: 20 }}>
+            Gerencie os profissionais da sua barbearia. Clientes poderão escolher com quem querem ser atendidos.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+            {localPros.map((pro, idx) => (
+              <div key={pro.id ?? idx}>
+                {proEditIdx === idx ? (
+                  <Card style={{ padding: 16 }}>
+                    <Input label="Nome" placeholder="João" value={proEditName} onChange={e => setProEditName(e.target.value)} />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <SecBtn onClick={() => { setProEditIdx(null); if (!pro.id) setLocalPros(p => p.filter((_, i) => i !== idx)) }} style={{ flex: 1 }}>Cancelar</SecBtn>
+                      <PrimaryBtn onClick={savePro} disabled={!proEditName.trim() || proSaving} style={{ flex: 2 }}>{proSaving ? 'Salvando...' : 'Salvar'}</PrimaryBtn>
+                    </div>
+                  </Card>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, opacity: pro.active === false ? 0.5 : 1 }}>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary }}>{pro.name || '(sem nome)'}</p>
+                      {pro.id && <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, marginTop: 2 }}>{pro.active !== false ? 'Ativo' : 'Inativo'}</p>}
+                    </div>
+                    {pro.id && <IconBtn onClick={() => toggleProActive(pro)}>{pro.active !== false ? 'desativar' : 'ativar'}</IconBtn>}
+                    <IconBtn onClick={() => { setProEditIdx(idx); setProEditName(pro.name) }}>editar</IconBtn>
+                    <IconBtn onClick={() => removePro(pro)} danger>×</IconBtn>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <GhostBtn onClick={addPro} style={{ color: ACCENT }}>+ Adicionar profissional</GhostBtn>
+        </div>
+      )}
     </div>
   )
 }
@@ -1219,13 +1313,14 @@ function SettingsSection({ owner, services, hoursConfig, onOwnerUpdate, onServic
 // ── Dashboard principal ───────────────────────────────────────────────────────
 export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdate }) {
   const isMobile = useIsMobile()
-  const [owner,       setOwner]       = useState(initialOwner)
-  const [section,     setSection]     = useState('bookings')
-  const [bookings,    setBookings]    = useState([])
-  const [services,    setServices]    = useState([])
-  const [hoursConfig, setHoursConfig] = useState({})
-  const [loading,     setLoading]     = useState(true)
-  const [toast,       setToast]       = useState(null)
+  const [owner,         setOwner]         = useState(initialOwner)
+  const [section,       setSection]       = useState('bookings')
+  const [bookings,      setBookings]      = useState([])
+  const [services,      setServices]      = useState([])
+  const [hoursConfig,   setHoursConfig]   = useState({})
+  const [professionals, setProfessionals] = useState([])
+  const [loading,       setLoading]       = useState(true)
+  const [toast,         setToast]         = useState(null)
 
   // ── trial ──────────────────────────────────────────────────────────────────
   const [now, setNow]           = useState(() => new Date())
@@ -1270,7 +1365,7 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
       .eq('owner_id', owner.id)
       .order('date', { ascending: true })
       .order('hour', { ascending: true })
-    setBookings(data ?? [])
+    setBookings((data ?? []).map(b => ({ ...b, professional_id: b.professional_id ?? null })))
   }, [owner.id])
 
   const loadServices = useCallback(async () => {
@@ -1285,8 +1380,13 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
     setHoursConfig(map)
   }, [owner.id])
 
+  const loadProfessionals = useCallback(async () => {
+    const { data } = await supabase.from('professionals').select('*').eq('owner_id', owner.id).order('sort_order')
+    setProfessionals(data ?? [])
+  }, [owner.id])
+
   useEffect(() => {
-    Promise.all([loadBookings(), loadServices(), loadHours()]).finally(() => setLoading(false))
+    Promise.all([loadBookings(), loadServices(), loadHours(), loadProfessionals()]).finally(() => setLoading(false))
     const channel = supabase.channel('admin-bookings')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `owner_id=eq.${owner.id}` }, loadBookings)
       .subscribe()
@@ -1423,7 +1523,7 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
         )}
 
         {section === 'bookings' && (
-          <BookingsSection bookings={bookings} loading={loading} updateStatus={updateStatus} deleteBooking={deleteBooking} onRefresh={loadBookings} />
+          <BookingsSection bookings={bookings} loading={loading} updateStatus={updateStatus} deleteBooking={deleteBooking} onRefresh={loadBookings} professionals={professionals} />
         )}
         {section === 'calendar' && (
           <CalendarSection bookings={bookings} updateStatus={updateStatus} onRefresh={loadBookings} />
@@ -1437,8 +1537,10 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
         {section === 'settings' && (
           <SettingsSection
             owner={owner} services={services} hoursConfig={hoursConfig}
+            professionals={professionals}
             onOwnerUpdate={handleOwnerUpdate} onServicesChange={loadServices}
-            onHoursChange={loadHours} showToast={showToast}
+            onHoursChange={loadHours} onProfessionalsChange={loadProfessionals}
+            showToast={showToast}
           />
         )}
         {section === 'plans' && <PlansSection owner={owner} />}
