@@ -682,210 +682,372 @@ function BookingPill({ b, onClick }) {
   )
 }
 
+// ── slot row (calendário de slots) ───────────────────────────────────────────
+function SlotRow({ hour, status, isBlocking, onClick }) {
+  const { type, booking } = status
+  let bg         = 'transparent'
+  let borderLeft = '3px solid transparent'
+  let mainLabel  = ''
+  let mainColor  = T.hint
+
+  if (type === 'booked') {
+    bg         = INK2
+    borderLeft = `3px solid ${STATUS_COLOR[booking.status] || HAIRLINE}`
+    mainLabel  = booking.client_name
+    mainColor  = T.primary
+  } else if (type === 'blocked') {
+    bg         = 'rgba(239,68,68,0.04)'
+    borderLeft = '3px solid rgba(239,68,68,0.45)'
+    mainLabel  = 'Bloqueado'
+    mainColor  = '#F87171'
+  } else {
+    mainLabel  = 'Disponível'
+    mainColor  = 'rgba(245,234,208,0.25)'
+  }
+
+  return (
+    <div
+      onClick={!isBlocking ? onClick : undefined}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
+        background: bg, border: `1px solid ${type === 'free' ? 'transparent' : HAIRLINE}`,
+        borderLeft, borderRadius: RADIUS,
+        cursor: isBlocking ? 'default' : 'pointer',
+        opacity: isBlocking ? 0.5 : 1, transition: 'opacity 0.15s',
+      }}
+    >
+      <span style={{ fontFamily: FONT_MONO, fontSize: 14, fontWeight: 600, color: ACCENT, minWidth: 44, flexShrink: 0 }}>
+        {hour}
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontFamily: FONT, fontWeight: type === 'booked' ? 600 : 400, fontSize: 14, color: mainColor }}>
+          {mainLabel}
+        </p>
+        {type === 'booked' && booking.services?.name && (
+          <p style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.muted, marginTop: 1 }}>
+            {booking.services.name}
+          </p>
+        )}
+      </div>
+      {type === 'booked' ? (
+        <Badge status={booking.status} />
+      ) : (
+        <span style={{
+          fontFamily: FONT_MONO, fontSize: 10, letterSpacing: '0.08em',
+          color: type === 'blocked' ? '#F87171' : T.hint,
+          border: `1px solid ${type === 'blocked' ? 'rgba(239,68,68,0.3)' : HAIRLINE}`,
+          borderRadius: 6, padding: '3px 8px', whiteSpace: 'nowrap', flexShrink: 0,
+        }}>
+          {isBlocking ? '...' : type === 'blocked' ? 'Desbloquear' : 'Bloquear'}
+        </span>
+      )}
+    </div>
+  )
+}
+
+// ── modal de agendamento manual ───────────────────────────────────────────────
+function ManualBookingModal({ owner, services, professionals, defaultDate, onClose, onSaved, showToast }) {
+  const [form, setForm] = useState({
+    date:            defaultDate || today(),
+    hour:            '',
+    client_name:     '',
+    client_phone:    '',
+    service_id:      services[0]?.id || '',
+    professional_id: '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
+
+  async function save() {
+    if (!form.date || !form.hour || !form.client_name.trim() || !form.service_id) {
+      showToast('Preencha data, horário, nome e serviço.', 'error')
+      return
+    }
+    setSaving(true)
+    const code = Math.random().toString(36).slice(2, 8).toUpperCase()
+    const { error } = await supabase.from('bookings').insert({
+      owner_id:        owner.id,
+      date:            form.date,
+      hour:            form.hour + ':00',
+      client_name:     form.client_name.trim(),
+      client_phone:    form.client_phone.replace(/\D/g, '') || null,
+      service_id:      form.service_id || null,
+      professional_id: form.professional_id || null,
+      status:          'manual',
+      code,
+    })
+    setSaving(false)
+    if (error) { showToast(`Erro ao salvar: ${error.message}`, 'error'); return }
+    showToast('Agendamento manual criado.')
+    onSaved()
+  }
+
+  const fieldStyle = {
+    width: '100%', padding: '9px 12px',
+    background: INK, border: `1px solid ${HAIRLINE}`, borderRadius: 8,
+    color: T.primary, fontFamily: FONT, fontSize: 14, boxSizing: 'border-box',
+  }
+  const labelStyle = {
+    fontFamily: FONT_MONO, fontSize: 10, color: T.hint,
+    textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4, display: 'block',
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <Card style={{ maxWidth: 440 }}>
+        <Eyebrow>Calendário</Eyebrow>
+        <h3 style={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: T.primary, marginBottom: 20 }}>
+          Novo agendamento manual
+        </h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Data *</label>
+              <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={fieldStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Horário *</label>
+              <select value={form.hour} onChange={e => set('hour', e.target.value)}
+                style={{ ...fieldStyle, appearance: 'none', WebkitAppearance: 'none' }}>
+                <option value="">—</option>
+                {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style={labelStyle}>Nome do cliente *</label>
+            <input value={form.client_name} onChange={e => set('client_name', e.target.value)}
+              placeholder="Nome completo" style={fieldStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>WhatsApp</label>
+            <input value={form.client_phone} onChange={e => set('client_phone', formatPhone(e.target.value))}
+              placeholder="(00) 00000-0000" style={fieldStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Serviço *</label>
+            <select value={form.service_id} onChange={e => set('service_id', e.target.value)}
+              style={{ ...fieldStyle, appearance: 'none', WebkitAppearance: 'none' }}>
+              <option value="">—</option>
+              {services.map(s => <option key={s.id} value={s.id}>{s.name} — {fmtPrice(s.price_cents)}</option>)}
+            </select>
+          </div>
+          {professionals.length > 0 && (
+            <div>
+              <label style={labelStyle}>Profissional</label>
+              <select value={form.professional_id} onChange={e => set('professional_id', e.target.value)}
+                style={{ ...fieldStyle, appearance: 'none', WebkitAppearance: 'none' }}>
+                <option value="">—</option>
+                {professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+        <Divider style={{ margin: '20px 0' }} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <PrimaryBtn onClick={save} disabled={saving} style={{ flex: 1 }}>
+            {saving ? 'Salvando...' : 'Confirmar agendamento'}
+          </PrimaryBtn>
+          <GhostBtn onClick={onClose}>Cancelar</GhostBtn>
+        </div>
+      </Card>
+    </Modal>
+  )
+}
+
 // ── seção calendário ──────────────────────────────────────────────────────────
-function CalendarSection({ bookings, updateStatus, onRefresh }) {
-  const isMobile = useIsMobile()
-  const [weekOffset, setWeekOffset] = useState(0)  // 0 = semana atual
-  const [selDay,     setSelDay]     = useState(null)
-  const [detail,     setDetail]     = useState(null)
+function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, blockedSlots, onBlockedSlotsChange, services, professionals, owner, showToast }) {
+  const [weekOffset,  setWeekOffset]  = useState(0)
+  const [selDay,      setSelDay]      = useState(null)
+  const [detail,      setDetail]      = useState(null)
+  const [blocking,    setBlocking]    = useState(null) // hora que está sendo (des)bloqueada
+  const [showManual,  setShowManual]  = useState(false)
 
   const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset])
   const todayStr = today()
 
-  // Ao trocar de semana: seleciona hoje (se estiver na semana) ou segunda
+  // seleciona hoje (se estiver na semana) ou a segunda-feira
   useEffect(() => {
     const todayInWeek = weekDays.find(d => toDateStr(d) === todayStr)
     setSelDay(todayInWeek || weekDays[0])
   }, [weekOffset]) // eslint-disable-line
 
-  function bookingsForDate(d) {
-    return bookings
-      .filter(b => b.date === toDateStr(d))
-      .sort((a, b) => (a.hour > b.hour ? 1 : -1))
-  }
-
   const wStart    = weekDays[0]
   const wEnd      = weekDays[6]
   const weekLabel = `${wStart.getDate()} ${MES_ABBR[wStart.getMonth()]} – ${wEnd.getDate()} ${MES_ABBR[wEnd.getMonth()]} ${wEnd.getFullYear()}`
+  const selDayStr = selDay ? toDateStr(selDay) : null
 
-  const selDayStr      = selDay ? toDateStr(selDay) : null
-  const selDayBookings = selDayStr
-    ? bookings.filter(b => b.date === selDayStr).sort((a, b) => (a.hour > b.hour ? 1 : -1))
-    : []
+  // gera slots de 30min a partir da config de horários do dia
+  function getSlotsForDate(d) {
+    if (!d) return []
+    const cfg = hoursConfig[d.getDay()]
+    if (!cfg || !cfg.open) return []
+    const slots = []
+    function addRange(start, end) {
+      if (!start || !end) return
+      const [sh, sm] = start.split(':').map(Number)
+      const [eh, em] = end.split(':').map(Number)
+      let t = sh * 60 + sm
+      const endT = eh * 60 + em
+      while (t < endT) {
+        slots.push(`${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`)
+        t += 30
+      }
+    }
+    addRange(cfg.morning_start, cfg.morning_end)
+    addRange(cfg.afternoon_start, cfg.afternoon_end)
+    return slots
+  }
 
-  // ── navegação de semana ────────────────────────────────────────────────────
+  const selSlots = useMemo(() => getSlotsForDate(selDay), [selDay, hoursConfig]) // eslint-disable-line
+
+  function slotStatus(hour) {
+    if (!selDayStr) return { type: 'free' }
+    const booking = bookings.find(b => b.date === selDayStr && b.hour?.slice(0, 5) === hour)
+    if (booking) return { type: 'booked', booking }
+    const slot = blockedSlots.find(s => s.date === selDayStr && s.hour?.slice(0, 5) === hour)
+    if (slot) return { type: 'blocked', slot }
+    return { type: 'free' }
+  }
+
+  async function toggleBlock(hour) {
+    if (!selDay || blocking) return
+    const st = slotStatus(hour)
+    if (st.type === 'booked') return
+    setBlocking(hour)
+    try {
+      if (st.type === 'blocked') {
+        const { error } = await supabase.from('blocked_slots').delete().eq('id', st.slot.id)
+        if (error) { showToast(`Erro ao desbloquear: ${error.message}`, 'error'); return }
+      } else {
+        const { error } = await supabase.from('blocked_slots').insert({
+          owner_id: owner.id,
+          date:     selDayStr,
+          hour:     hour + ':00',
+        })
+        if (error) { showToast(`Erro ao bloquear: ${error.message}`, 'error'); return }
+      }
+      await onBlockedSlotsChange()
+    } finally {
+      setBlocking(null)
+    }
+  }
+
+  // ── nav de semana ─────────────────────────────────────────────────────────
   const WeekNav = (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-      <button
-        onClick={() => setWeekOffset(w => w - 1)}
-        style={{ background: 'none', border: `1px solid ${HAIRLINE}`, borderRadius: 8, padding: '6px 14px', color: T.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1, flexShrink: 0 }}
-      >←</button>
-
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+      <button onClick={() => setWeekOffset(w => w - 1)}
+        style={{ background: 'none', border: `1px solid ${HAIRLINE}`, borderRadius: 8, padding: '6px 14px', color: T.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1, flexShrink: 0 }}>←</button>
       <div style={{ flex: 1, textAlign: 'center' }}>
-        <p style={{ fontFamily: FONT_MONO, fontSize: 12, color: T.primary, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-          {weekLabel}
-        </p>
+        <p style={{ fontFamily: FONT_MONO, fontSize: 12, color: T.primary, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{weekLabel}</p>
         {weekOffset !== 0 && (
-          <button
-            onClick={() => setWeekOffset(0)}
-            style={{ background: 'none', border: 'none', color: ACCENT, fontFamily: FONT_MONO, fontSize: 9, letterSpacing: '0.12em', cursor: 'pointer', padding: '2px 0', marginTop: 2, textDecoration: 'underline', textUnderlineOffset: 2 }}
-          >SEMANA ATUAL</button>
+          <button onClick={() => setWeekOffset(0)}
+            style={{ background: 'none', border: 'none', color: ACCENT, fontFamily: FONT_MONO, fontSize: 9, letterSpacing: '0.12em', cursor: 'pointer', padding: '2px 0', marginTop: 2, textDecoration: 'underline', textUnderlineOffset: 2 }}>
+            SEMANA ATUAL
+          </button>
         )}
       </div>
-
-      <button
-        onClick={() => setWeekOffset(w => w + 1)}
-        style={{ background: 'none', border: `1px solid ${HAIRLINE}`, borderRadius: 8, padding: '6px 14px', color: T.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1, flexShrink: 0 }}
-      >→</button>
+      <button onClick={() => setWeekOffset(w => w + 1)}
+        style={{ background: 'none', border: `1px solid ${HAIRLINE}`, borderRadius: 8, padding: '6px 14px', color: T.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1, flexShrink: 0 }}>→</button>
     </div>
   )
 
+  // ── strip de dias ─────────────────────────────────────────────────────────
+  const WeekStrip = (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 24 }}>
+      {weekDays.map((d, i) => {
+        const ds         = toDateStr(d)
+        const isToday    = ds === todayStr
+        const isSel      = selDay && toDateStr(selDay) === ds
+        const cnt        = bookings.filter(b => b.date === ds).length
+        const hasPending = bookings.some(b => b.date === ds && b.status === 'pending')
+        return (
+          <div key={i} onClick={() => setSelDay(d)}
+            style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+              padding: '8px 4px', borderRadius: RADIUS,
+              border: `1px solid ${isSel ? ACCENT : isToday ? 'rgba(235,188,99,0.3)' : 'transparent'}`,
+              background: isSel ? ACCENT_DIM : 'transparent',
+              cursor: 'pointer', transition: 'background 0.15s', userSelect: 'none',
+            }}
+          >
+            <span style={{ fontFamily: FONT_MONO, fontSize: 8, color: isSel ? ACCENT : T.hint, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              {WEEK_LABELS[i]}
+            </span>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 15, fontWeight: 700, color: isSel || isToday ? ACCENT : T.primary, lineHeight: 1 }}>
+              {d.getDate()}
+            </span>
+            {cnt > 0 ? (
+              <div style={{ fontFamily: FONT_MONO, fontSize: 8, fontWeight: 700, background: hasPending ? STATUS_COLOR.pending : STATUS_COLOR.confirmed, color: INK, borderRadius: 4, padding: '1px 5px', minWidth: 16, textAlign: 'center' }}>
+                {cnt}
+              </div>
+            ) : (
+              <div style={{ height: 14 }} />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+
+  // slots do dia selecionado
+  const selDayCfg  = selDay ? hoursConfig[selDay.getDay()] : null
+  const dayIsOpen  = selDayCfg?.open
+
   return (
     <div>
-      {/* cabeçalho da seção */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+      {/* cabeçalho */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
         <h1 style={{ fontFamily: FONT, fontSize: 26, fontWeight: 700, color: T.primary, letterSpacing: '-0.02em', lineHeight: 1.1, margin: 0 }}>Calendário</h1>
-        <RefreshBtn onRefresh={onRefresh} />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            onClick={() => setShowManual(true)}
+            style={{ background: ACCENT, border: 'none', borderRadius: RADIUS, padding: '9px 16px', color: INK, fontFamily: FONT_MONO, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap' }}
+          >
+            + Agendamento manual
+          </button>
+          <RefreshBtn onRefresh={async () => { await onRefresh(); await onBlockedSlotsChange() }} />
+        </div>
       </div>
 
       {WeekNav}
+      {WeekStrip}
 
-      {isMobile ? (
-        /* ── MOBILE: strip de 7 dias + painel de detalhes ── */
-        <>
-          {/* strip horizontal de dias */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 20 }}>
-            {weekDays.map((d, i) => {
-              const bks     = bookingsForDate(d)
-              const ds      = toDateStr(d)
-              const isToday = ds === todayStr
-              const isSel   = selDay && toDateStr(selDay) === ds
-              const hasPending = bks.some(b => b.status === 'pending')
-              return (
-                <div
-                  key={i}
-                  onClick={() => setSelDay(d)}
-                  style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-                    padding: '8px 4px', borderRadius: RADIUS,
-                    border: `1px solid ${isSel ? ACCENT : isToday ? 'rgba(235,188,99,0.3)' : 'transparent'}`,
-                    background: isSel ? ACCENT_DIM : 'transparent',
-                    cursor: 'pointer', transition: 'background 0.15s', userSelect: 'none',
-                  }}
-                >
-                  <span style={{ fontFamily: FONT_MONO, fontSize: 8, color: isSel ? ACCENT : T.hint, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                    {WEEK_LABELS[i]}
-                  </span>
-                  <span style={{ fontFamily: FONT_MONO, fontSize: 15, fontWeight: 700, color: isSel || isToday ? ACCENT : T.primary, lineHeight: 1 }}>
-                    {d.getDate()}
-                  </span>
-                  {bks.length > 0 ? (
-                    <div style={{ fontFamily: FONT_MONO, fontSize: 8, fontWeight: 700, background: hasPending ? STATUS_COLOR.pending : STATUS_COLOR.confirmed, color: INK, borderRadius: 4, padding: '1px 5px', minWidth: 16, textAlign: 'center' }}>
-                      {bks.length}
-                    </div>
-                  ) : (
-                    <div style={{ height: 14 }} />
-                  )}
-                </div>
-              )
-            })}
-          </div>
-
-          {/* lista do dia selecionado */}
-          {selDay && (
-            <div>
-              <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary, marginBottom: 12, textTransform: 'capitalize' }}>
-                {selDay.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
-                {selDayBookings.length > 0 && (
-                  <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.hint, fontWeight: 400, marginLeft: 8 }}>
-                    {selDayBookings.length} agend.
-                  </span>
-                )}
-              </p>
-              {selDayBookings.length === 0 ? (
-                <p style={{ fontFamily: FONT, fontSize: 14, color: T.hint, textAlign: 'center', padding: '32px 0' }}>
-                  Sem agendamentos.
-                </p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {selDayBookings.map(b => (
-                    <div
-                      key={b.id}
-                      onClick={() => setDetail(b)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: INK2, border: `1px solid ${HAIRLINE}`, borderLeft: `3px solid ${STATUS_COLOR[b.status] || HAIRLINE}`, borderRadius: RADIUS, cursor: 'pointer' }}
-                    >
-                      <span style={{ fontFamily: FONT_MONO, fontSize: 15, fontWeight: 600, color: ACCENT, minWidth: 44 }}>
-                        {b.hour?.slice(0, 5)}
-                      </span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary }}>{b.client_name}</p>
-                        <p style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.muted }}>{b.services?.name ?? '—'}</p>
-                      </div>
-                      <Badge status={b.status} />
-                    </div>
-                  ))}
-                </div>
-              )}
+      {/* slots do dia */}
+      {selDay && (
+        <div>
+          <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary, marginBottom: 12, textTransform: 'capitalize' }}>
+            {selDay.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
+          </p>
+          {!dayIsOpen ? (
+            <p style={{ fontFamily: FONT, fontSize: 14, color: T.hint, textAlign: 'center', padding: '32px 0' }}>
+              Dia fechado.
+            </p>
+          ) : selSlots.length === 0 ? (
+            <p style={{ fontFamily: FONT, fontSize: 14, color: T.hint, textAlign: 'center', padding: '32px 0' }}>
+              Nenhum horário configurado.
+            </p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {selSlots.map(hour => {
+                const st = slotStatus(hour)
+                return (
+                  <SlotRow
+                    key={hour}
+                    hour={hour}
+                    status={st}
+                    isBlocking={blocking === hour}
+                    onClick={() => st.type === 'booked' ? setDetail(st.booking) : toggleBlock(hour)}
+                  />
+                )
+              })}
             </div>
           )}
-        </>
-      ) : (
-        /* ── DESKTOP: grid de 7 colunas com scroll interno ── */
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, alignItems: 'start' }}>
-          {weekDays.map((d, i) => {
-            const bks        = bookingsForDate(d)
-            const ds         = toDateStr(d)
-            const isToday    = ds === todayStr
-            const hasPending = bks.some(b => b.status === 'pending')
-            return (
-              <div
-                key={i}
-                style={{
-                  background: INK2,
-                  border: `1px solid ${isToday ? 'rgba(235,188,99,0.4)' : HAIRLINE}`,
-                  borderRadius: RADIUS,
-                  overflow: 'hidden',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  minHeight: 120,
-                }}
-              >
-                {/* cabeçalho do dia */}
-                <div style={{
-                  padding: '10px 8px 8px',
-                  borderBottom: `1px solid ${HAIRLINE}`,
-                  background: isToday ? 'rgba(235,188,99,0.06)' : 'transparent',
-                  textAlign: 'center',
-                  flexShrink: 0,
-                }}>
-                  <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: isToday ? ACCENT : T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>
-                    {WEEK_LABELS[i]}
-                  </p>
-                  <p style={{ fontFamily: FONT_MONO, fontSize: 20, fontWeight: 700, color: isToday ? ACCENT : T.primary, lineHeight: 1 }}>
-                    {d.getDate()}
-                  </p>
-                  {bks.length > 0 && (
-                    <div style={{ marginTop: 5, fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700, color: INK, background: hasPending ? STATUS_COLOR.pending : STATUS_COLOR.confirmed, borderRadius: 4, display: 'inline-block', padding: '1px 6px' }}>
-                      {bks.length}
-                    </div>
-                  )}
-                </div>
-
-                {/* lista de agendamentos — scroll se muitos */}
-                <div style={{ padding: '8px 6px', overflowY: 'auto', maxHeight: 'calc(100vh - 260px)', flex: 1 }}>
-                  {bks.length === 0 ? (
-                    <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: 'rgba(245,234,208,0.18)', textAlign: 'center', padding: '14px 0' }}>—</p>
-                  ) : (
-                    bks.map(b => <BookingPill key={b.id} b={b} onClick={() => setDetail(b)} />)
-                  )}
-                </div>
-              </div>
-            )
-          })}
         </div>
       )}
 
-      {/* modal de detalhes */}
+      {/* modal de detalhes de agendamento */}
       {detail && (
         <Modal onClose={() => setDetail(null)}>
           <Card>
@@ -918,6 +1080,19 @@ function CalendarSection({ bookings, updateStatus, onRefresh }) {
             </div>
           </Card>
         </Modal>
+      )}
+
+      {/* modal de agendamento manual */}
+      {showManual && (
+        <ManualBookingModal
+          owner={owner}
+          services={services}
+          professionals={professionals}
+          defaultDate={selDayStr}
+          onClose={() => setShowManual(false)}
+          onSaved={async () => { setShowManual(false); await onRefresh() }}
+          showToast={showToast}
+        />
       )}
     </div>
   )
@@ -1166,34 +1341,15 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
     setLocalHours(h => ({ ...h, [wd]: { ...h[wd], [field]: val } }))
   }
 
-  function addBlockedRange(wd) {
-    setLocalHours(h => ({ ...h, [wd]: { ...h[wd], blocked_ranges: [...(h[wd]?.blocked_ranges || []), { start: '', end: '' }] } }))
-  }
-
-  function removeBlockedRange(wd, idx) {
-    setLocalHours(h => ({ ...h, [wd]: { ...h[wd], blocked_ranges: (h[wd]?.blocked_ranges || []).filter((_, i) => i !== idx) } }))
-  }
-
-  function updateBlockedRange(wd, idx, field, val) {
-    setLocalHours(h => ({
-      ...h, [wd]: {
-        ...h[wd],
-        blocked_ranges: (h[wd]?.blocked_ranges || []).map((r, i) => i === idx ? { ...r, [field]: val } : r),
-      },
-    }))
-  }
-
   async function saveHours() {
     setHoursSaving(true)
     for (const [wd, cfg] of Object.entries(localHours)) {
-      const validRanges = (cfg.blocked_ranges || []).filter(r => r.start && r.end)
       const payload = {
         open:            cfg.open,
         morning_start:   cfg.open ? cfg.morning_start   || null : null,
         morning_end:     cfg.open ? cfg.morning_end     || null : null,
         afternoon_start: cfg.open ? cfg.afternoon_start || null : null,
         afternoon_end:   cfg.open ? cfg.afternoon_end   || null : null,
-        blocked_ranges:  cfg.open ? validRanges : [],
       }
       if (cfg.id) {
         await supabase.from('hours_config').update(payload).eq('id', cfg.id)
@@ -1331,8 +1487,7 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
         <div style={{ maxWidth: 600 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 24 }}>
             {DIAS.map((dia, wd) => {
-              const cfg    = localHours[wd] || { open: false, morning_start: '', morning_end: '', afternoon_start: '', afternoon_end: '', blocked_ranges: [] }
-              const blocks = cfg.blocked_ranges || []
+              const cfg = localHours[wd] || { open: false, morning_start: '', morning_end: '', afternoon_start: '', afternoon_end: '' }
               return (
                 <div key={wd} style={{ background: INK2, border: `1px solid ${cfg.open ? HAIRLINE : 'transparent'}`, borderRadius: RADIUS, overflow: 'hidden', transition: 'border-color 0.2s' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}>
@@ -1362,34 +1517,6 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
                           </div>
                         </div>
                       </div>
-
-                      {/* bloqueios */}
-                      {blocks.length > 0 && (
-                        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px dashed ${HAIRLINE}` }}>
-                          <p style={{ ...labelStyle, marginBottom: 10, color: '#F87171' }}>Períodos bloqueados</p>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            {blocks.map((range, ri) => (
-                              <div key={ri} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <div style={{ flex: 1 }}>
-                                  <TimeSelect value={range.start} onChange={v => updateBlockedRange(wd, ri, 'start', v)} placeholder="início" />
-                                </div>
-                                <span style={{ color: T.hint, fontSize: 12, flexShrink: 0 }}>→</span>
-                                <div style={{ flex: 1 }}>
-                                  <TimeSelect value={range.end} onChange={v => updateBlockedRange(wd, ri, 'end', v)} placeholder="fim" />
-                                </div>
-                                <button onClick={() => removeBlockedRange(wd, ri)}
-                                  style={{ background: 'transparent', border: `1px solid rgba(248,113,113,0.3)`, borderRadius: 6, width: 28, height: 28, cursor: 'pointer', color: '#F87171', fontSize: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                  ×
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      <button onClick={() => addBlockedRange(wd)}
-                        style={{ marginTop: 12, background: 'transparent', border: `1px dashed rgba(248,113,113,0.4)`, borderRadius: 8, padding: '6px 14px', color: '#F87171', fontFamily: FONT_MONO, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer' }}>
-                        + Bloquear período
-                      </button>
                     </div>
                   )}
                 </div>
@@ -1449,6 +1576,7 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
   const [services,      setServices]      = useState([])
   const [hoursConfig,   setHoursConfig]   = useState({})
   const [professionals, setProfessionals] = useState([])
+  const [blockedSlots,  setBlockedSlots]  = useState([])
   const [loading,       setLoading]       = useState(true)
   const [toast,         setToast]         = useState(null)
 
@@ -1525,13 +1653,18 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
     setProfessionals(data ?? [])
   }, [owner.id])
 
+  const loadBlockedSlots = useCallback(async () => {
+    const { data } = await supabase.from('blocked_slots').select('*').eq('owner_id', owner.id)
+    setBlockedSlots(data ?? [])
+  }, [owner.id])
+
   useEffect(() => {
-    Promise.all([loadBookings(), loadServices(), loadHours(), loadProfessionals()]).finally(() => setLoading(false))
+    Promise.all([loadBookings(), loadServices(), loadHours(), loadProfessionals(), loadBlockedSlots()]).finally(() => setLoading(false))
     const channel = supabase.channel('admin-bookings')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `owner_id=eq.${owner.id}` }, loadBookings)
       .subscribe()
     return () => supabase.removeChannel(channel)
-  }, [loadBookings, loadServices, loadHours])
+  }, [loadBookings, loadServices, loadHours, loadBlockedSlots])
 
   async function updateStatus(id, status) {
     const { error } = await supabase.from('bookings').update({ status }).eq('id', id)
@@ -1718,7 +1851,11 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
           <BookingsSection bookings={bookings} loading={loading} updateStatus={updateStatus} deleteBooking={deleteBooking} onRefresh={loadBookings} professionals={professionals} />
         )}
         {section === 'calendar' && (
-          <CalendarSection bookings={bookings} updateStatus={updateStatus} onRefresh={loadBookings} />
+          <CalendarSection
+            bookings={bookings} updateStatus={updateStatus} onRefresh={loadBookings}
+            hoursConfig={hoursConfig} blockedSlots={blockedSlots} onBlockedSlotsChange={loadBlockedSlots}
+            services={services} professionals={professionals} owner={owner} showToast={showToast}
+          />
         )}
         {section === 'reports' && (
           <ReportsSection bookings={bookings} onRefresh={loadBookings} />
