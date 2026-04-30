@@ -235,7 +235,7 @@ function CpfCnpjModal({ onConfirm, onClose }) {
 function PlansSection({ owner }) {
   const [loading,   setLoading]   = useState(null)
   const [docModal,  setDocModal]  = useState(null) // { planKey, cycleKey } aguardando CPF/CNPJ
-  const [cycleKey,  setCycleKey]  = useState('yearly') // ciclo selecionado — anual destacado por padrão
+  const [cycleKey,  setCycleKey]  = useState('monthly') // mensal como padrão
 
   const currentPlan = owner?.plan ?? 'free'
   const cycle       = CYCLES.find(c => c.key === cycleKey)
@@ -324,35 +324,48 @@ function PlansSection({ owner }) {
         <div style={{ display: 'inline-flex', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, padding: 4, gap: 4 }}>
           {CYCLES.map(c => {
             const sel = c.key === cycleKey
+            const isBest = c.key === 'yearly'
             return (
-              <button
-                key={c.key}
-                onClick={() => setCycleKey(c.key)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 8,
-                  padding: '10px 16px',
-                  background: sel ? ACCENT : 'transparent',
-                  border: 'none',
-                  borderRadius: RADIUS - 4,
-                  color: sel ? INK : T.primary,
-                  fontFamily: FONT, fontWeight: 700, fontSize: 13,
-                  cursor: 'pointer',
-                  transition: 'background 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
-                }}
-              >
-                {c.label}
-                {c.discount > 0 && (
-                  <span style={{
-                    fontFamily: FONT_MONO, fontSize: 10, fontWeight: 700,
-                    letterSpacing: '0.04em',
-                    padding: '2px 6px', borderRadius: 4,
-                    background: sel ? 'rgba(17,12,8,0.18)' : 'rgba(235,188,99,0.15)',
-                    color: sel ? INK : ACCENT,
-                  }}>
-                    −{Math.round(c.discount * 100)}%
-                  </span>
+              <div key={c.key} style={{ position: 'relative' }}>
+                {/* selo "Melhor preço" flutuando acima do botão anual */}
+                {isBest && (
+                  <div style={{
+                    position: 'absolute', top: -22, left: '50%', transform: 'translateX(-50%)',
+                    background: ACCENT, color: INK,
+                    fontFamily: FONT_MONO, fontSize: 8, fontWeight: 700,
+                    letterSpacing: '0.14em', textTransform: 'uppercase',
+                    padding: '3px 8px', borderRadius: '4px 4px 0 0',
+                    whiteSpace: 'nowrap',
+                  }}>Melhor preço</div>
                 )}
-              </button>
+                <button
+                  onClick={() => setCycleKey(c.key)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 8,
+                    padding: '10px 16px',
+                    background: sel ? ACCENT : 'transparent',
+                    border: isBest && !sel ? `1px solid rgba(235,188,99,0.35)` : 'none',
+                    borderRadius: RADIUS - 4,
+                    color: sel ? INK : T.primary,
+                    fontFamily: FONT, fontWeight: 700, fontSize: 13,
+                    cursor: 'pointer',
+                    transition: 'background 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
+                  }}
+                >
+                  {c.label}
+                  {c.discount > 0 && (
+                    <span style={{
+                      fontFamily: FONT_MONO, fontSize: 10, fontWeight: 700,
+                      letterSpacing: '0.04em',
+                      padding: '2px 6px', borderRadius: 4,
+                      background: sel ? 'rgba(17,12,8,0.18)' : 'rgba(235,188,99,0.15)',
+                      color: sel ? INK : ACCENT,
+                    }}>
+                      −{Math.round(c.discount * 100)}%
+                    </span>
+                  )}
+                </button>
+              </div>
             )
           })}
         </div>
@@ -380,15 +393,6 @@ function PlansSection({ owner }) {
               flexDirection: 'column',
               position: 'relative',
             }}>
-              {plan.highlight && !active && (
-                <div style={{
-                  position: 'absolute', top: -1, right: 20,
-                  background: ACCENT, color: INK,
-                  fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700,
-                  letterSpacing: '0.12em', textTransform: 'uppercase',
-                  padding: '3px 10px', borderRadius: '0 0 6px 6px',
-                }}>Recomendado</div>
-              )}
               {active && (
                 <div style={{
                   position: 'absolute', top: -1, right: 20,
