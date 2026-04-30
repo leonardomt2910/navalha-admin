@@ -125,8 +125,7 @@ const PLANS = [
   {
     key: 'start',
     name: 'Start',
-    price: 'R$ 69',
-    period: '/mês',
+    monthlyCents: 6900,
     target: 'Solo — 1 barbeiro que quer parar de usar caderno e WhatsApp.',
     highlight: false,
     features: [
@@ -142,8 +141,7 @@ const PLANS = [
   {
     key: 'pro',
     name: 'Pro',
-    price: 'R$ 119',
-    period: '/mês',
+    monthlyCents: 11900,
     target: 'Até 4 barbeiros — dono que quer profissionalizar a operação.',
     highlight: true,
     features: [
@@ -157,8 +155,7 @@ const PLANS = [
   {
     key: 'scale',
     name: 'Scale',
-    price: 'R$ 219',
-    period: '/mês',
+    monthlyCents: 21900,
     target: '5+ barbeiros ou redes — para quem está crescendo.',
     highlight: false,
     features: [
@@ -169,6 +166,22 @@ const PLANS = [
     ],
   },
 ]
+
+// Ciclos de cobrança. Pago à vista — o owner ganha 6 ou 12 meses de uso.
+const CYCLES = [
+  { key: 'monthly',  label: 'Mensal',     months: 1,  discount: 0    },
+  { key: 'semester', label: 'Semestral',  months: 6,  discount: 0.15 },
+  { key: 'yearly',   label: 'Anual',      months: 12, discount: 0.25 },
+]
+
+// Calcula valores de um plano para um ciclo. Centavos pra evitar drift.
+function priceFor(plan, cycle) {
+  const fullCents       = plan.monthlyCents * cycle.months
+  const totalCents      = Math.round(fullCents * (1 - cycle.discount))
+  const perMonthCents   = Math.round(totalCents / cycle.months)
+  const savingsCents    = fullCents - totalCents
+  return { fullCents, totalCents, perMonthCents, savingsCents }
+}
 
 const SUPABASE_FUNCTIONS_URL = 'https://grgfmzueciolmdjeufwz.supabase.co/functions/v1'
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdyZ2ZtenVlY2lvbG1kamV1Znd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNjQxMzksImV4cCI6MjA5MjY0MDEzOX0.lOYdvtdkXCYlYxjvJLjNZvZAoal0JW9yjaq-zLgmuNA'
@@ -221,27 +234,28 @@ function CpfCnpjModal({ onConfirm, onClose }) {
 
 function PlansSection({ owner }) {
   const [loading,   setLoading]   = useState(null)
-  const [docModal,  setDocModal]  = useState(null) // planKey aguardando CPF/CNPJ
+  const [docModal,  setDocModal]  = useState(null) // { planKey, cycleKey } aguardando CPF/CNPJ
+  const [cycleKey,  setCycleKey]  = useState('yearly') // ciclo selecionado — anual destacado por padrão
 
   const currentPlan = owner?.plan ?? 'free'
+  const cycle       = CYCLES.find(c => c.key === cycleKey)
 
   async function handleSubscribe(planKey) {
-    // Se já tem CPF/CNPJ salvo, vai direto; senão abre modal
     if (!owner?.cpf_cnpj) {
-      setDocModal(planKey)
+      setDocModal({ planKey, cycleKey })
       return
     }
-    await checkout(planKey, owner.cpf_cnpj)
+    await checkout(planKey, cycleKey, owner.cpf_cnpj)
   }
 
-  async function checkout(planKey, cpfCnpj) {
+  async function checkout(planKey, cycle, cpfCnpj) {
     setDocModal(null)
     setLoading(planKey)
     try {
       const res = await fetch(`${SUPABASE_FUNCTIONS_URL}/create-checkout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
-        body: JSON.stringify({ ownerId: owner.id, planKey, cpfCnpj }),
+        body: JSON.stringify({ ownerId: owner.id, planKey, cycle, cpfCnpj }),
       })
       const data = await res.json()
       if (data.paymentUrl) {
@@ -263,34 +277,99 @@ function PlansSection({ owner }) {
       {docModal && (
         <CpfCnpjModal
           onClose={() => setDocModal(null)}
-          onConfirm={cpfCnpj => checkout(docModal, cpfCnpj)}
+          onConfirm={cpfCnpj => checkout(docModal.planKey, docModal.cycleKey, cpfCnpj)}
         />
       )}
 
       <PageTitle>Planos</PageTitle>
 
       {/* plano atual */}
-      {currentPlan !== 'free' && (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: 'rgba(235,188,99,0.08)', border: `1px solid rgba(235,188,99,0.25)`, borderRadius: RADIUS, padding: '10px 16px', marginBottom: 28 }}>
-          <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: ACCENT, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Plano atual</span>
-          <span style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: T.primary }}>{PLAN_LABEL[currentPlan]}</span>
-          {owner?.plan_expires_at && (
-            <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.hint }}>
-              · renova em {new Date(owner.plan_expires_at).toLocaleDateString('pt-BR')}
-            </span>
-          )}
-        </div>
-      )}
+      {currentPlan !== 'free' && (() => {
+        const expiresAt    = owner?.plan_expires_at ? new Date(owner.plan_expires_at) : null
+        const expired      = expiresAt && expiresAt < new Date()
+        const daysLeft     = expiresAt ? Math.ceil((expiresAt - new Date()) / 86400000) : null
+        const expiringSoon = !expired && daysLeft !== null && daysLeft <= 7
+        const autoRenew    = Boolean(owner?.asaas_subscription_id)
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 28, maxWidth: 480 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: expired ? 'rgba(239,68,68,0.08)' : 'rgba(235,188,99,0.08)', border: `1px solid ${expired ? 'rgba(239,68,68,0.3)' : 'rgba(235,188,99,0.25)'}`, borderRadius: RADIUS, padding: '10px 16px' }}>
+              <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: expired ? '#F87171' : ACCENT, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                {expired ? 'Plano expirado' : 'Plano ativo'}
+              </span>
+              <span style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: T.primary }}>{PLAN_LABEL[currentPlan]}</span>
+              {expiresAt && !expired && (
+                <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: expiringSoon ? '#FBBF24' : T.hint }}>
+                  · expira em {expiresAt.toLocaleDateString('pt-BR')}{expiringSoon ? ` (${daysLeft}d)` : ''}
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 4 }}>
+              <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: autoRenew ? ACCENT : T.hint, letterSpacing: '0.06em' }}>
+                {autoRenew ? '→ Renovação automática mensal' : '→ Cobrança única — renovação manual necessária ao expirar'}
+              </span>
+            </div>
+          </div>
+        )
+      })()}
 
-      <p style={{ fontFamily: FONT, fontSize: 14, color: T.muted, marginBottom: 32, maxWidth: 560 }}>
+      <p style={{ fontFamily: FONT, fontSize: 14, color: T.muted, marginBottom: 24, maxWidth: 560 }}>
         Escolha o plano ideal para a sua barbearia. O acesso é liberado imediatamente após o pagamento.
       </p>
+
+      {/* seletor de ciclo de cobrança */}
+      <div style={{ marginBottom: 28 }}>
+        <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10 }}>
+          Ciclo de cobrança
+        </p>
+        <div style={{ display: 'inline-flex', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, padding: 4, gap: 4 }}>
+          {CYCLES.map(c => {
+            const sel = c.key === cycleKey
+            return (
+              <button
+                key={c.key}
+                onClick={() => setCycleKey(c.key)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  padding: '10px 16px',
+                  background: sel ? ACCENT : 'transparent',
+                  border: 'none',
+                  borderRadius: RADIUS - 4,
+                  color: sel ? INK : T.primary,
+                  fontFamily: FONT, fontWeight: 700, fontSize: 13,
+                  cursor: 'pointer',
+                  transition: 'background 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
+                }}
+              >
+                {c.label}
+                {c.discount > 0 && (
+                  <span style={{
+                    fontFamily: FONT_MONO, fontSize: 10, fontWeight: 700,
+                    letterSpacing: '0.04em',
+                    padding: '2px 6px', borderRadius: 4,
+                    background: sel ? 'rgba(17,12,8,0.18)' : 'rgba(235,188,99,0.15)',
+                    color: sel ? INK : ACCENT,
+                  }}>
+                    −{Math.round(c.discount * 100)}%
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+        {cycle.discount > 0 && (
+          <p style={{ fontFamily: FONT_MONO, fontSize: 11, color: ACCENT, marginTop: 10, letterSpacing: '0.04em' }}>
+            → Pagamento único · acesso por {cycle.months} meses
+          </p>
+        )}
+      </div>
 
       {/* cards de plano */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 16 }}>
         {PLANS.map(plan => {
-          const active = isActive(plan.key)
-          const busy   = loading === plan.key
+          const active            = isActive(plan.key)
+          const busy              = loading === plan.key
+          const { perMonthCents, totalCents, savingsCents } = priceFor(plan, cycle)
+          const showDiscount      = cycle.discount > 0
           return (
             <div key={plan.key} style={{
               background: plan.highlight ? 'rgba(235,188,99,0.06)' : INK2,
@@ -322,12 +401,53 @@ function PlansSection({ owner }) {
 
               <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: plan.highlight ? ACCENT : T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10 }}>{plan.name}</p>
 
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, marginBottom: 6 }}>
-                <span style={{ fontFamily: FONT_MONO, fontSize: 32, fontWeight: 700, color: T.primary }}>{plan.price}</span>
-                <span style={{ fontFamily: FONT_MONO, fontSize: 13, color: T.hint }}>{plan.period}</span>
+              {/* preço — mensal equivalente em destaque */}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
+                <span style={{ fontFamily: FONT_MONO, fontSize: 32, fontWeight: 700, color: T.primary }}>
+                  {fmtPrice(perMonthCents)}
+                </span>
+                <span style={{ fontFamily: FONT_MONO, fontSize: 13, color: T.hint }}>/mês</span>
               </div>
 
-              <p style={{ fontFamily: FONT, fontSize: 12, color: T.muted, lineHeight: 1.5, marginBottom: 24, minHeight: 48 }}>{plan.target}</p>
+              {/* preço original riscado quando há desconto */}
+              {showDiscount ? (
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10, minHeight: 18 }}>
+                  <span style={{
+                    fontFamily: FONT_MONO, fontSize: 12,
+                    color: T.hint,
+                    textDecoration: 'line-through',
+                    textDecorationColor: 'rgba(235,188,99,0.5)',
+                  }}>
+                    {fmtPrice(plan.monthlyCents)}
+                  </span>
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: ACCENT, letterSpacing: '0.04em' }}>
+                    economize {fmtPrice(savingsCents)}
+                  </span>
+                </div>
+              ) : (
+                <div style={{ minHeight: 18, marginBottom: 10 }} />
+              )}
+
+              {/* total à vista (somente para ciclos com desconto) */}
+              {showDiscount && (
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  background: 'rgba(235,188,99,0.08)',
+                  border: `1px solid rgba(235,188,99,0.25)`,
+                  borderRadius: RADIUS - 4,
+                  padding: '8px 12px',
+                  marginBottom: 16,
+                }}>
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: ACCENT, textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+                    {cycle.months} meses à vista
+                  </span>
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 13, fontWeight: 700, color: T.primary }}>
+                    {fmtPrice(totalCents)}
+                  </span>
+                </div>
+              )}
+
+              <p style={{ fontFamily: FONT, fontSize: 12, color: T.muted, lineHeight: 1.5, marginBottom: 20, minHeight: 48 }}>{plan.target}</p>
               <div style={{ width: '100%', height: 1, background: HAIRLINE, marginBottom: 20 }} />
 
               <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10, flex: 1, marginBottom: 28 }}>
@@ -355,7 +475,13 @@ function PlansSection({ owner }) {
                   transition: 'opacity 0.15s',
                 }}
               >
-                {busy ? 'Aguarde...' : active ? 'Plano ativo' : 'Assinar'}
+                {busy
+                  ? 'Aguarde...'
+                  : active
+                    ? 'Plano ativo'
+                    : showDiscount
+                      ? `Assinar ${cycle.months} meses · ${fmtPrice(totalCents)}`
+                      : 'Assinar'}
               </button>
             </div>
           )
@@ -967,7 +1093,7 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
       .update({ name: profName.trim(), slug: slugify(profSlug), whatsapp: rawPhone })
       .eq('id', owner.id).select().single()
     setProfSaving(false)
-    if (error) { showToast('Erro ao salvar perfil.', 'error'); return }
+    if (error) { showToast(`Erro ao salvar perfil: ${error.message}`, 'error'); return }
     onOwnerUpdate(data)
     showToast('Perfil atualizado.')
   }
@@ -996,10 +1122,10 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
     setSvcSaving(true)
     if (svc.id) {
       const { error } = await supabase.from('services').update(updated).eq('id', svc.id)
-      if (error) { showToast('Erro ao salvar serviço.', 'error'); setSvcSaving(false); return }
+      if (error) { showToast(`Erro ao salvar serviço: ${error.message}`, 'error'); setSvcSaving(false); return }
     } else {
       const { data, error } = await supabase.from('services').insert({ ...updated, owner_id: owner.id, sort_order: editIdx }).select().single()
-      if (error) { showToast('Erro ao salvar serviço.', 'error'); setSvcSaving(false); return }
+      if (error) { showToast(`Erro ao salvar serviço: ${error.message}`, 'error'); setSvcSaving(false); return }
       const next = [...localSvcs]; next[editIdx] = data; setLocalSvcs(next)
       onServicesChange(); setEditIdx(null); setSvcSaving(false); return
     }
@@ -1012,7 +1138,7 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
     if (!confirm(`Remover "${svc.name}"?`)) return
     if (svc.id) {
       const { error } = await supabase.from('services').delete().eq('id', svc.id)
-      if (error) { showToast('Erro ao remover.', 'error'); return }
+      if (error) { showToast(`Erro ao remover: ${error.message}`, 'error'); return }
     }
     setLocalSvcs(s => s.filter((_, i) => i !== idx))
     if (editIdx === idx) setEditIdx(null)
@@ -1090,12 +1216,12 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
     const pro = localPros[proEditIdx]
     if (pro?.id) {
       const { error } = await supabase.from('professionals').update({ name: proEditName.trim() }).eq('id', pro.id)
-      if (error) { showToast('Erro ao salvar.', 'error'); setProSaving(false); return }
+      if (error) { showToast(`Erro ao salvar: ${error.message}`, 'error'); setProSaving(false); return }
     } else {
       const { data, error } = await supabase.from('professionals')
         .insert({ owner_id: owner.id, name: proEditName.trim(), sort_order: localPros.length, active: true })
         .select().single()
-      if (error) { showToast('Erro ao salvar.', 'error'); setProSaving(false); return }
+      if (error) { showToast(`Erro ao salvar: ${error.message}`, 'error'); setProSaving(false); return }
       const next = [...localPros]; next[proEditIdx] = data; setLocalPros(next)
       onProfessionalsChange(); setProEditIdx(null); setProSaving(false); return
     }
@@ -1113,7 +1239,7 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
     if (!confirm(`Remover "${pro.name}"?`)) return
     if (pro.id) {
       const { error } = await supabase.from('professionals').delete().eq('id', pro.id)
-      if (error) { showToast('Erro ao remover.', 'error'); return }
+      if (error) { showToast(`Erro ao remover: ${error.message}`, 'error'); return }
     }
     setLocalPros(p => p.filter(x => x.id !== pro.id))
     if (proEditIdx !== null) setProEditIdx(null)
@@ -1341,6 +1467,16 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
   const trialMins    = Math.floor((msLeft % 3600000) / 60000)
   const trialSecs    = Math.floor((msLeft % 60000) / 1000)
 
+  // ── expiração de plano pago ───────────────────────────────────────────────
+  const planExpiresAt    = isPaidPlan && owner.plan_expires_at ? new Date(owner.plan_expires_at) : null
+  const planExpired      = Boolean(planExpiresAt && planExpiresAt < now)
+  const planMsLeft       = planExpiresAt ? Math.max(0, planExpiresAt - now) : 0
+  const planDaysLeft     = Math.ceil(planMsLeft / 86400000)
+  const planExpiringSoon = Boolean(planExpiresAt && planExpiresAt >= now && planDaysLeft <= 7)
+  // owner tem asaas_subscription_id → plano mensal com renovação automática
+  // sem subscription_id → cobrança única (semestral/anual) → renovação manual
+  const autoRenews       = Boolean(owner.asaas_subscription_id)
+
   // desativa owner no Supabase ao expirar o trial
   useEffect(() => {
     if (trialExpired && !deactivatedRef.current) {
@@ -1395,7 +1531,7 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
 
   async function updateStatus(id, status) {
     const { error } = await supabase.from('bookings').update({ status }).eq('id', id)
-    if (error) { showToast('Erro ao atualizar.', 'error'); return }
+    if (error) { showToast(`Erro ao atualizar: ${error.message}`, 'error'); return }
     showToast(status === 'rejected' ? 'Agendamento cancelado.' : 'Status atualizado.')
     loadBookings()
   }
@@ -1440,6 +1576,26 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
               <p style={{ fontFamily: FONT_MONO, fontSize: 13, fontWeight: 700, color: trialDays < 2 ? '#FBBF24' : T.primary, letterSpacing: '0.04em' }}>
                 {trialDays}d {String(trialHours).padStart(2,'0')}h {String(trialMins).padStart(2,'0')}m {String(trialSecs).padStart(2,'0')}s
               </p>
+            )}
+          </div>
+        )}
+        {/* aviso de expiração de plano pago */}
+        {(planExpired || planExpiringSoon) && (
+          <div style={{ marginBottom: 10, padding: '10px 12px', borderRadius: RADIUS, background: planExpired ? 'rgba(239,68,68,0.1)' : 'rgba(251,191,36,0.08)', border: `1px solid ${planExpired ? 'rgba(239,68,68,0.3)' : 'rgba(251,191,36,0.35)'}` }}>
+            <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: planExpired ? '#F87171' : '#FBBF24', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>
+              {planExpired ? 'Plano expirado' : `Expira em ${planDaysLeft}d`}
+            </p>
+            {planExpired ? (
+              <p style={{ fontFamily: FONT, fontSize: 12, color: '#F87171', lineHeight: 1.4 }}>Renove para reativar o app.</p>
+            ) : (
+              <p style={{ fontFamily: FONT, fontSize: 12, color: '#FBBF24', lineHeight: 1.4 }}>
+                {autoRenews ? 'Renovação automática agendada.' : 'Renove antes de expirar.'}
+              </p>
+            )}
+            {!autoRenews && (
+              <button onClick={() => setSection('plans')} style={{ marginTop: 8, background: 'transparent', border: `1px solid ${planExpired ? 'rgba(239,68,68,0.4)' : 'rgba(251,191,36,0.4)'}`, borderRadius: 6, padding: '3px 10px', color: planExpired ? '#F87171' : '#FBBF24', fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer', width: '100%' }}>
+                Renovar plano
+              </button>
             )}
           </div>
         )}
@@ -1504,6 +1660,22 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
           )}
         </div>
       )}
+      {/* faixa de expiração de plano pago — mobile */}
+      {isMobile && (planExpired || planExpiringSoon) && (
+        <div style={{ background: planExpired ? 'rgba(239,68,68,0.12)' : 'rgba(251,191,36,0.08)', borderBottom: `1px solid ${planExpired ? 'rgba(239,68,68,0.3)' : 'rgba(251,191,36,0.35)'}`, padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: planExpired ? '#F87171' : '#FBBF24', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+            {planExpired ? 'Plano expirado' : `Plano expira em ${planDaysLeft} dia${planDaysLeft !== 1 ? 's' : ''}`}
+          </p>
+          {!autoRenews && (
+            <button onClick={() => setSection('plans')} style={{ background: 'transparent', border: `1px solid ${planExpired ? 'rgba(239,68,68,0.4)' : 'rgba(251,191,36,0.4)'}`, borderRadius: 6, padding: '3px 10px', color: planExpired ? '#F87171' : '#FBBF24', fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer', flexShrink: 0 }}>
+              {planExpired ? 'Renovar' : 'Renovar agora'}
+            </button>
+          )}
+          {autoRenews && !planExpired && (
+            <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: '#FBBF24' }}>Renovação automática</p>
+          )}
+        </div>
+      )}
       <main style={{ flex: 1, padding: isMobile ? '20px 16px' : '32px 36px', overflowY: 'auto', paddingBottom: isMobile ? 80 : 32, position: 'relative' }}>
         {/* paywall de trial expirado */}
         {trialExpired && section !== 'plans' && (
@@ -1517,6 +1689,22 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
               <button onClick={() => setSection('plans')}
                 style={{ background: ACCENT, border: 'none', borderRadius: RADIUS, padding: '14px 32px', color: INK, fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', cursor: 'pointer' }}>
                 Ver planos
+              </button>
+            </div>
+          </div>
+        )}
+        {/* paywall de plano pago expirado */}
+        {planExpired && section !== 'plans' && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(17,12,8,0.92)', backdropFilter: 'blur(6px)', padding: 32 }}>
+            <div style={{ maxWidth: 420, textAlign: 'center' }}>
+              <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: '#F87171', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 16 }}>→ PLANO EXPIRADO</p>
+              <h2 style={{ fontFamily: FONT, fontSize: 26, fontWeight: 700, color: T.primary, marginBottom: 12, letterSpacing: '-0.02em' }}>Seu plano encerrou.</h2>
+              <p style={{ fontFamily: FONT, fontSize: 14, color: T.muted, lineHeight: 1.6, marginBottom: 32 }}>
+                O link de agendamento dos clientes foi suspenso. Renove o plano para reativar tudo imediatamente.
+              </p>
+              <button onClick={() => setSection('plans')}
+                style={{ background: ACCENT, border: 'none', borderRadius: RADIUS, padding: '14px 32px', color: INK, fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', cursor: 'pointer' }}>
+                Renovar plano
               </button>
             </div>
           </div>
