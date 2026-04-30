@@ -499,14 +499,16 @@ function PlansSection({ owner }) {
 // ── seção agendamentos ─────────────────────────────────────────────────────────
 function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRefresh, professionals }) {
   const isMobile = useIsMobile()
-  const [filterDate,   setFilterDate]   = useState('')
-  const [filterStatus, setFilterStatus] = useState('all')
-  const [detail,       setDetail]       = useState(null)
+  const [filterDate,       setFilterDate]       = useState('')
+  const [filterStatus,     setFilterStatus]     = useState('all')
+  const [filterProfessional, setFilterProfessional] = useState('all')
+  const [detail,           setDetail]           = useState(null)
 
   const filtered = bookings.filter(b => {
     const matchDate   = !filterDate || b.date === filterDate
     const matchStatus = filterStatus === 'all' || b.status === filterStatus
-    return matchDate && matchStatus
+    const matchPro    = filterProfessional === 'all' || b.professional_id === filterProfessional
+    return matchDate && matchStatus && matchPro
   })
 
   const thStyle = { fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', padding: '10px 16px', textAlign: 'left', borderBottom: `1px solid ${HAIRLINE}`, whiteSpace: 'nowrap' }
@@ -537,7 +539,16 @@ function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRef
             <option value="manual">Manual</option>
           </select>
         </div>
-        <GhostBtn onClick={() => { setFilterDate(''); setFilterStatus('all') }}>Limpar filtros</GhostBtn>
+        {professionals.length > 0 && (
+          <div>
+            <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Profissional</p>
+            <select value={filterProfessional} onChange={e => setFilterProfessional(e.target.value)} style={{ padding: '10px 12px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, color: T.primary, fontFamily: FONT, fontSize: 13, cursor: 'pointer', minWidth: 160 }}>
+              <option value="all">Todos</option>
+              {professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+        )}
+        <GhostBtn onClick={() => { setFilterDate(''); setFilterStatus('all'); setFilterProfessional('all') }}>Limpar filtros</GhostBtn>
       </div>
 
       {loading ? (
@@ -858,11 +869,12 @@ function ManualBookingModal({ owner, services, professionals, defaultDate, onClo
 
 // ── seção calendário ──────────────────────────────────────────────────────────
 function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, blockedSlots, onBlockedSlotsChange, services, professionals, owner, showToast }) {
-  const [weekOffset,  setWeekOffset]  = useState(0)
-  const [selDay,      setSelDay]      = useState(null)
-  const [detail,      setDetail]      = useState(null)
-  const [blocking,    setBlocking]    = useState(null) // hora que está sendo (des)bloqueada
-  const [showManual,  setShowManual]  = useState(false)
+  const [weekOffset,  setWeekOffset]        = useState(0)
+  const [selDay,      setSelDay]            = useState(null)
+  const [detail,      setDetail]            = useState(null)
+  const [blocking,    setBlocking]          = useState(null) // hora que está sendo (des)bloqueada
+  const [showManual,  setShowManual]        = useState(false)
+  const [filterProfessional, setFilterProfessional] = useState('all')
 
   const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset])
   const todayStr = today()
@@ -904,7 +916,8 @@ function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, block
 
   function slotStatus(hour) {
     if (!selDayStr) return { type: 'free' }
-    const booking = bookings.find(b => b.date === selDayStr && b.hour?.slice(0, 5) === hour)
+    const proFilter = b => filterProfessional === 'all' ? true : (b.professional_id === filterProfessional || b.professional_id === null)
+    const booking = bookings.find(b => b.date === selDayStr && b.hour?.slice(0, 5) === hour && proFilter(b))
     if (booking) return { type: 'booked', booking }
     const slot = blockedSlots.find(s => s.date === selDayStr && s.hour?.slice(0, 5) === hour)
     if (slot) return { type: 'blocked', slot }
@@ -1000,7 +1013,16 @@ function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, block
       {/* cabeçalho */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
         <h1 style={{ fontFamily: FONT, fontSize: 26, fontWeight: 700, color: T.primary, letterSpacing: '-0.02em', lineHeight: 1.1, margin: 0 }}>Calendário</h1>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          {professionals.length > 0 && (
+            <div>
+              <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Profissional</p>
+              <select value={filterProfessional} onChange={e => setFilterProfessional(e.target.value)} style={{ padding: '9px 12px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, color: T.primary, fontFamily: FONT, fontSize: 13, cursor: 'pointer', minWidth: 140 }}>
+                <option value="all">Todos</option>
+                {professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+          )}
           <button
             onClick={() => setShowManual(true)}
             style={{ background: ACCENT, border: 'none', borderRadius: RADIUS, padding: '9px 16px', color: INK, fontFamily: FONT_MONO, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap' }}
@@ -1099,9 +1121,10 @@ function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, block
 }
 
 // ── seção relatórios ──────────────────────────────────────────────────────────
-function ReportsSection({ bookings, onRefresh }) {
+function ReportsSection({ bookings, onRefresh, professionals }) {
   const currentMonth = today().slice(0, 7)
-  const [selMonth, setSelMonth] = useState(currentMonth)
+  const [selMonth,            setSelMonth]            = useState(currentMonth)
+  const [filterProfessional,  setFilterProfessional]  = useState('all')
 
   // meses disponíveis a partir dos bookings (únicos, decrescente)
   const availableMonths = useMemo(() => {
@@ -1129,13 +1152,14 @@ function ReportsSection({ bookings, onRefresh }) {
     return slot <= now
   }
 
-  const inMonth   = bookings.filter(b => b.date.startsWith(selMonth))
+  const proFilter = b => filterProfessional === 'all' ? true : (b.professional_id === filterProfessional || b.professional_id === null)
+  const inMonth   = bookings.filter(b => b.date.startsWith(selMonth) && proFilter(b))
   const confirmed = inMonth.filter(b => (b.status === 'confirmed' || b.status === 'manual') && alreadyOccurred(b))
   const cancelled = inMonth.filter(b => b.status === 'rejected')
   const pending   = inMonth.filter(b => b.status === 'pending' || ((b.status === 'confirmed' || b.status === 'manual') && !alreadyOccurred(b)))
   const revenue   = confirmed.reduce((sum, b) => sum + (b.services?.price_cents ?? 0), 0)
 
-  const totalConfirmed = bookings.filter(b => (b.status === 'confirmed' || b.status === 'manual') && alreadyOccurred(b)).length
+  const totalConfirmed = bookings.filter(b => (b.status === 'confirmed' || b.status === 'manual') && alreadyOccurred(b) && proFilter(b)).length
 
   const cardStyle = { background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, padding: '20px 22px' }
 
@@ -1143,7 +1167,7 @@ function ReportsSection({ bookings, onRefresh }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <h1 style={{ fontFamily: FONT, fontSize: 26, fontWeight: 700, color: T.primary, letterSpacing: '-0.02em', lineHeight: 1.1, margin: 0 }}>Relatórios</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
           <div>
             <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5 }}>Mês</p>
             <select value={selMonth} onChange={e => setSelMonth(e.target.value)}
@@ -1153,9 +1177,16 @@ function ReportsSection({ bookings, onRefresh }) {
               ))}
             </select>
           </div>
-          <div style={{ marginTop: 14 }}>
-            <RefreshBtn onRefresh={onRefresh} />
-          </div>
+          {professionals.length > 0 && (
+            <div>
+              <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5 }}>Profissional</p>
+              <select value={filterProfessional} onChange={e => setFilterProfessional(e.target.value)} style={{ padding: '9px 14px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, color: T.primary, fontFamily: FONT_MONO, fontSize: 12, cursor: 'pointer', minWidth: 160 }}>
+                <option value="all">Todos</option>
+                {professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+          )}
+          <RefreshBtn onRefresh={onRefresh} />
         </div>
       </div>
 
@@ -1858,7 +1889,7 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
           />
         )}
         {section === 'reports' && (
-          <ReportsSection bookings={bookings} onRefresh={loadBookings} />
+          <ReportsSection bookings={bookings} onRefresh={loadBookings} professionals={professionals} />
         )}
         {section === 'client-link' && (
           <ClientLinkSection owner={owner} showToast={showToast} />
