@@ -756,6 +756,65 @@ function SlotRow({ hour, status, isBlocking, onClick }) {
   )
 }
 
+// ── célula de slot (calendário multi-profissional) ───────────────────────────
+function ProSlotCell({ status, isBlocking, onClick }) {
+  const { type, booking } = status
+  const [hovered, setHovered] = useState(false)
+  const isBooked  = type === 'booked'
+  const isBlocked = type === 'blocked'
+
+  return (
+    <div
+      onClick={isBlocking ? undefined : onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        padding: '8px 10px',
+        minHeight: 54,
+        cursor: isBlocking ? 'default' : 'pointer',
+        opacity: isBlocking ? 0.5 : 1,
+        transition: 'background 0.12s',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        borderRadius: 6,
+        background: isBooked
+          ? INK2
+          : isBlocked
+            ? 'rgba(239,68,68,0.06)'
+            : hovered ? 'rgba(235,188,99,0.03)' : 'transparent',
+        borderLeft: isBooked
+          ? `3px solid ${STATUS_COLOR[booking.status] || HAIRLINE}`
+          : isBlocked
+            ? '3px solid rgba(239,68,68,0.4)'
+            : hovered ? `3px solid ${ACCENT_DIM}` : '3px solid transparent',
+      }}
+    >
+      {isBooked && (
+        <>
+          <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: T.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
+            {booking.client_name}
+          </div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2, lineHeight: 1.3 }}>
+            {booking.services?.name ?? '—'}
+          </div>
+          <div style={{ marginTop: 4 }}><Badge status={booking.status} /></div>
+        </>
+      )}
+      {isBlocked && (
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: '#F87171', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+          {isBlocking ? '...' : 'Bloqueado'}
+        </span>
+      )}
+      {!isBooked && !isBlocked && hovered && !isBlocking && (
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          Bloquear
+        </span>
+      )}
+    </div>
+  )
+}
+
 // ── modal de agendamento manual ───────────────────────────────────────────────
 function ManualBookingModal({ owner, services, professionals, defaultDate, onClose, onSaved, showToast }) {
   const [form, setForm] = useState({
@@ -874,7 +933,6 @@ function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, block
   const [detail,      setDetail]            = useState(null)
   const [blocking,    setBlocking]          = useState(null) // hora que está sendo (des)bloqueada
   const [showManual,  setShowManual]        = useState(false)
-  const [filterProfessional, setFilterProfessional] = useState('all')
 
   const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset])
   const todayStr = today()
@@ -912,26 +970,64 @@ function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, block
     return slots
   }
 
-  const selSlots = useMemo(() => getSlotsForDate(selDay), [selDay, hoursConfig]) // eslint-disable-line
+  const selSlots        = useMemo(() => getSlotsForDate(selDay),  [selDay, hoursConfig]) // eslint-disable-line
+  const selSlotsGrouped = useMemo(() => getSlotsGrouped(selDay),  [selDay, hoursConfig]) // eslint-disable-line
 
+  // usado no modo sem profissionais (lista única)
   function slotStatus(hour) {
     if (!selDayStr) return { type: 'free' }
-    const proFilter = b => filterProfessional === 'all' ? true : (b.professional_id === filterProfessional || b.professional_id === null)
-    const booking = bookings.find(b => b.date === selDayStr && b.hour?.slice(0, 5) === hour && proFilter(b))
+    const booking = bookings.find(b => b.date === selDayStr && b.hour?.slice(0, 5) === hour)
     if (booking) return { type: 'booked', booking }
     const slot = blockedSlots.find(s => s.date === selDayStr && s.hour?.slice(0, 5) === hour)
     if (slot) return { type: 'blocked', slot }
     return { type: 'free' }
   }
 
+  // usado no grid multi-profissional: booking por profissional, bloqueio global
+  function slotStatusForPro(hour, proId) {
+    if (!selDayStr) return { type: 'free' }
+    const booking = bookings.find(b =>
+      b.date === selDayStr &&
+      b.hour?.slice(0, 5) === hour &&
+      b.professional_id === proId
+    )
+    if (booking) return { type: 'booked', booking }
+    const slot = blockedSlots.find(s => s.date === selDayStr && s.hour?.slice(0, 5) === hour)
+    if (slot) return { type: 'blocked', slot }
+    return { type: 'free' }
+  }
+
+  // retorna {morning, afternoon} separados para os separadores visuais
+  function getSlotsGrouped(d) {
+    if (!d) return { morning: [], afternoon: [] }
+    const cfg = hoursConfig[d.getDay()]
+    if (!cfg || !cfg.open) return { morning: [], afternoon: [] }
+    function makeRange(start, end) {
+      if (!start || !end) return []
+      const slots = []
+      const [sh, sm] = start.split(':').map(Number)
+      const [eh, em] = end.split(':').map(Number)
+      let t = sh * 60 + sm
+      const endT = eh * 60 + em
+      while (t < endT) {
+        slots.push(`${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`)
+        t += 30
+      }
+      return slots
+    }
+    return {
+      morning:   makeRange(cfg.morning_start, cfg.morning_end),
+      afternoon: makeRange(cfg.afternoon_start, cfg.afternoon_end),
+    }
+  }
+
   async function toggleBlock(hour) {
     if (!selDay || blocking) return
-    const st = slotStatus(hour)
-    if (st.type === 'booked') return
+    const existingBlock = blockedSlots.find(s => s.date === selDayStr && s.hour?.slice(0, 5) === hour)
     setBlocking(hour)
     try {
-      if (st.type === 'blocked') {
-        const { error } = await supabase.from('blocked_slots').delete().eq('id', st.slot.id)
+      if (existingBlock) {
+        const { error } = await supabase.from('blocked_slots').delete().eq('id', existingBlock.id)
         if (error) { showToast(`Erro ao desbloquear: ${error.message}`, 'error'); return }
       } else {
         const { error } = await supabase.from('blocked_slots').insert({
@@ -1014,15 +1110,6 @@ function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, block
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
         <h1 style={{ fontFamily: FONT, fontSize: 26, fontWeight: 700, color: T.primary, letterSpacing: '-0.02em', lineHeight: 1.1, margin: 0 }}>Calendário</h1>
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          {professionals.length > 0 && (
-            <div>
-              <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Profissional</p>
-              <select value={filterProfessional} onChange={e => setFilterProfessional(e.target.value)} style={{ padding: '9px 12px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, color: T.primary, fontFamily: FONT, fontSize: 13, cursor: 'pointer', minWidth: 140 }}>
-                <option value="all">Todos</option>
-                {professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
-          )}
           <button
             onClick={() => setShowManual(true)}
             style={{ background: ACCENT, border: 'none', borderRadius: RADIUS, padding: '9px 16px', color: INK, fontFamily: FONT_MONO, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap' }}
@@ -1039,9 +1126,10 @@ function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, block
       {/* slots do dia */}
       {selDay && (
         <div>
-          <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary, marginBottom: 12, textTransform: 'capitalize' }}>
+          <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary, marginBottom: 16, textTransform: 'capitalize' }}>
             {selDay.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
           </p>
+
           {!dayIsOpen ? (
             <p style={{ fontFamily: FONT, fontSize: 14, color: T.hint, textAlign: 'center', padding: '32px 0' }}>
               Dia fechado.
@@ -1050,7 +1138,87 @@ function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, block
             <p style={{ fontFamily: FONT, fontSize: 14, color: T.hint, textAlign: 'center', padding: '32px 0' }}>
               Nenhum horário configurado.
             </p>
+          ) : professionals.length > 0 ? (
+
+            /* ── grid multi-profissional ─────────────────────────────────── */
+            <div style={{ overflowX: 'auto', borderRadius: RADIUS, border: `1px solid ${HAIRLINE}` }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 56 + professionals.length * 168 }}>
+                <thead>
+                  <tr>
+                    {/* canto superior esquerdo */}
+                    <th style={{ width: 56, padding: 0, position: 'sticky', left: 0, zIndex: 2, background: INK2, borderBottom: `1px solid ${HAIRLINE}` }} />
+                    {professionals.map(pro => (
+                      <th key={pro.id} style={{ minWidth: 168, padding: '12px 14px', textAlign: 'left', fontWeight: 'unset', background: INK2, borderBottom: `1px solid ${HAIRLINE}`, borderLeft: `1px solid ${HAIRLINE}` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: ACCENT_DIM, border: `1px solid rgba(235,188,99,0.35)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT_MONO, fontSize: 11, fontWeight: 700, color: ACCENT, flexShrink: 0 }}>
+                            {pro.name.slice(0, 1).toUpperCase()}
+                          </div>
+                          <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: T.primary }}>
+                            {pro.name}
+                          </span>
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* bloco manhã */}
+                  {selSlotsGrouped.morning.length > 0 && (
+                    <>
+                      <tr>
+                        <td colSpan={professionals.length + 1} style={{ padding: '5px 14px', fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', background: 'rgba(17,12,8,0.5)', borderTop: `1px solid ${HAIRLINE}` }}>
+                          Manhã
+                        </td>
+                      </tr>
+                      {selSlotsGrouped.morning.map(hour => (
+                        <tr key={hour}>
+                          <td style={{ position: 'sticky', left: 0, zIndex: 1, width: 56, background: INK2, borderTop: `1px solid ${HAIRLINE}`, padding: '0 10px', textAlign: 'right', fontFamily: FONT_MONO, fontSize: 12, fontWeight: 600, color: ACCENT, whiteSpace: 'nowrap' }}>
+                            {hour}
+                          </td>
+                          {professionals.map(pro => {
+                            const st = slotStatusForPro(hour, pro.id)
+                            return (
+                              <td key={pro.id} style={{ padding: 3, borderTop: `1px solid ${HAIRLINE}`, borderLeft: `1px solid ${HAIRLINE}`, verticalAlign: 'top', minWidth: 168 }}>
+                                <ProSlotCell status={st} isBlocking={blocking === hour} onClick={() => st.type === 'booked' ? setDetail(st.booking) : toggleBlock(hour)} />
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      ))}
+                    </>
+                  )}
+
+                  {/* bloco tarde */}
+                  {selSlotsGrouped.afternoon.length > 0 && (
+                    <>
+                      <tr>
+                        <td colSpan={professionals.length + 1} style={{ padding: '5px 14px', fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', background: 'rgba(17,12,8,0.5)', borderTop: `1px solid ${HAIRLINE}` }}>
+                          Tarde
+                        </td>
+                      </tr>
+                      {selSlotsGrouped.afternoon.map(hour => (
+                        <tr key={hour}>
+                          <td style={{ position: 'sticky', left: 0, zIndex: 1, width: 56, background: INK2, borderTop: `1px solid ${HAIRLINE}`, padding: '0 10px', textAlign: 'right', fontFamily: FONT_MONO, fontSize: 12, fontWeight: 600, color: ACCENT, whiteSpace: 'nowrap' }}>
+                            {hour}
+                          </td>
+                          {professionals.map(pro => {
+                            const st = slotStatusForPro(hour, pro.id)
+                            return (
+                              <td key={pro.id} style={{ padding: 3, borderTop: `1px solid ${HAIRLINE}`, borderLeft: `1px solid ${HAIRLINE}`, verticalAlign: 'top', minWidth: 168 }}>
+                                <ProSlotCell status={st} isBlocking={blocking === hour} onClick={() => st.type === 'booked' ? setDetail(st.booking) : toggleBlock(hour)} />
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      ))}
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
           ) : (
+            /* ── lista única (sem profissionais cadastrados) ─────────────── */
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {selSlots.map(hour => {
                 const st = slotStatus(hour)
