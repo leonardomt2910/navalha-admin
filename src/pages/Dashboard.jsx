@@ -983,7 +983,7 @@ function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, block
     return { type: 'free' }
   }
 
-  // usado no grid multi-profissional: booking por profissional, bloqueio global
+  // usado no grid multi-profissional: booking e bloqueio individuais por profissional
   function slotStatusForPro(hour, proId) {
     if (!selDayStr) return { type: 'free' }
     const booking = bookings.find(b =>
@@ -992,7 +992,11 @@ function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, block
       b.professional_id === proId
     )
     if (booking) return { type: 'booked', booking }
-    const slot = blockedSlots.find(s => s.date === selDayStr && s.hour?.slice(0, 5) === hour)
+    const slot = blockedSlots.find(s =>
+      s.date === selDayStr &&
+      s.hour?.slice(0, 5) === hour &&
+      (s.professional_id === proId || s.professional_id === null)
+    )
     if (slot) return { type: 'blocked', slot }
     return { type: 'free' }
   }
@@ -1021,19 +1025,26 @@ function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, block
     }
   }
 
-  async function toggleBlock(hour) {
+  // proId = null em modo sem profissionais (bloqueio global)
+  async function toggleBlock(hour, proId = null) {
     if (!selDay || blocking) return
-    const existingBlock = blockedSlots.find(s => s.date === selDayStr && s.hour?.slice(0, 5) === hour)
-    setBlocking(hour)
+    const blockKey = proId ? `${hour}:${proId}` : hour
+    const existingBlock = blockedSlots.find(s =>
+      s.date === selDayStr &&
+      s.hour?.slice(0, 5) === hour &&
+      s.professional_id === proId
+    )
+    setBlocking(blockKey)
     try {
       if (existingBlock) {
         const { error } = await supabase.from('blocked_slots').delete().eq('id', existingBlock.id)
         if (error) { showToast(`Erro ao desbloquear: ${error.message}`, 'error'); return }
       } else {
         const { error } = await supabase.from('blocked_slots').insert({
-          owner_id: owner.id,
-          date:     selDayStr,
-          hour:     hour + ':00',
+          owner_id:        owner.id,
+          date:            selDayStr,
+          hour:            hour + ':00',
+          professional_id: proId,
         })
         if (error) { showToast(`Erro ao bloquear: ${error.message}`, 'error'); return }
       }
@@ -1176,10 +1187,11 @@ function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, block
                             {hour}
                           </td>
                           {professionals.map(pro => {
-                            const st = slotStatusForPro(hour, pro.id)
+                            const st      = slotStatusForPro(hour, pro.id)
+                            const bKey    = `${hour}:${pro.id}`
                             return (
                               <td key={pro.id} style={{ padding: 3, borderTop: `1px solid ${HAIRLINE}`, borderLeft: `1px solid ${HAIRLINE}`, verticalAlign: 'top', minWidth: 168 }}>
-                                <ProSlotCell status={st} isBlocking={blocking === hour} onClick={() => st.type === 'booked' ? setDetail(st.booking) : toggleBlock(hour)} />
+                                <ProSlotCell status={st} isBlocking={blocking === bKey} onClick={() => st.type === 'booked' ? setDetail(st.booking) : toggleBlock(hour, pro.id)} />
                               </td>
                             )
                           })}
@@ -1202,10 +1214,11 @@ function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, block
                             {hour}
                           </td>
                           {professionals.map(pro => {
-                            const st = slotStatusForPro(hour, pro.id)
+                            const st      = slotStatusForPro(hour, pro.id)
+                            const bKey    = `${hour}:${pro.id}`
                             return (
                               <td key={pro.id} style={{ padding: 3, borderTop: `1px solid ${HAIRLINE}`, borderLeft: `1px solid ${HAIRLINE}`, verticalAlign: 'top', minWidth: 168 }}>
-                                <ProSlotCell status={st} isBlocking={blocking === hour} onClick={() => st.type === 'booked' ? setDetail(st.booking) : toggleBlock(hour)} />
+                                <ProSlotCell status={st} isBlocking={blocking === bKey} onClick={() => st.type === 'booked' ? setDetail(st.booking) : toggleBlock(hour, pro.id)} />
                               </td>
                             )
                           })}
