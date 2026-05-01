@@ -1582,30 +1582,85 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
   const labelStyle = { fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }
 
   // ── equipe ─────────────────────────────────────────────────────────────────
-  const [localPros,   setLocalPros]   = useState(professionals ?? [])
-  const [proEditIdx,  setProEditIdx]  = useState(null)
-  const [proEditName, setProEditName] = useState('')
-  const [proSaving,   setProSaving]   = useState(false)
+  const [localPros,          setLocalPros]          = useState(professionals ?? [])
+  const [proEditIdx,         setProEditIdx]         = useState(null)
+  const [proEditName,        setProEditName]        = useState('')
+  const [proSaving,          setProSaving]          = useState(false)
+  const [proEditAvatarFile,  setProEditAvatarFile]  = useState(null)
+  const [proEditAvatarPreview, setProEditAvatarPreview] = useState(null)
+  const proAvatarInputRef = useRef(null)
 
   useEffect(() => { setLocalPros(professionals ?? []) }, [professionals])
+
+  function handleAvatarSelect(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (proEditAvatarPreview) URL.revokeObjectURL(proEditAvatarPreview)
+    setProEditAvatarFile(file)
+    setProEditAvatarPreview(URL.createObjectURL(file))
+    e.target.value = ''
+  }
+
+  function openProEdit(idx, pro) {
+    if (proEditAvatarPreview) URL.revokeObjectURL(proEditAvatarPreview)
+    setProEditAvatarFile(null)
+    setProEditAvatarPreview(null)
+    setProEditIdx(idx)
+    setProEditName(pro.name)
+  }
+
+  function cancelProEdit(idx, pro) {
+    setProEditIdx(null)
+    if (!pro.id) setLocalPros(p => p.filter((_, i) => i !== idx))
+    if (proEditAvatarPreview) URL.revokeObjectURL(proEditAvatarPreview)
+    setProEditAvatarFile(null)
+    setProEditAvatarPreview(null)
+  }
 
   async function savePro() {
     if (!proEditName.trim()) return
     setProSaving(true)
-    const pro = localPros[proEditIdx]
-    if (pro?.id) {
-      const { error } = await supabase.from('professionals').update({ name: proEditName.trim() }).eq('id', pro.id)
-      if (error) { showToast(`Erro ao salvar: ${error.message}`, 'error'); setProSaving(false); return }
-    } else {
-      const { data, error } = await supabase.from('professionals')
-        .insert({ owner_id: owner.id, name: proEditName.trim(), sort_order: localPros.length, active: true })
-        .select().single()
-      if (error) { showToast(`Erro ao salvar: ${error.message}`, 'error'); setProSaving(false); return }
-      const next = [...localPros]; next[proEditIdx] = data; setLocalPros(next)
-      onProfessionalsChange(); setProEditIdx(null); setProSaving(false); return
+    const existing = localPros[proEditIdx]
+    try {
+      // 1. criar se novo, para obter o id antes do upload
+      let proId = existing?.id
+      if (!proId) {
+        const { data, error } = await supabase.from('professionals')
+          .insert({ owner_id: owner.id, name: proEditName.trim(), sort_order: localPros.length, active: true })
+          .select().single()
+        if (error) throw error
+        proId = data.id
+      }
+
+      // 2. upload de avatar se um arquivo foi selecionado
+      let avatarUrl = existing?.avatar_url ?? null
+      if (proEditAvatarFile) {
+        const ext = (proEditAvatarFile.type.split('/')[1] || 'jpg').replace(/\+.*/, '')
+        const path = `${owner.id}/${proId}.${ext}`
+        const { error: upErr } = await supabase.storage
+          .from('avatars').upload(path, proEditAvatarFile, { upsert: true })
+        if (upErr) throw upErr
+        const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
+        avatarUrl = urlData.publicUrl
+      }
+
+      // 3. salvar nome + avatar_url
+      const { error: updErr } = await supabase.from('professionals')
+        .update({ name: proEditName.trim(), avatar_url: avatarUrl })
+        .eq('id', proId)
+      if (updErr) throw updErr
+
+      if (proEditAvatarPreview) URL.revokeObjectURL(proEditAvatarPreview)
+      setProEditAvatarFile(null)
+      setProEditAvatarPreview(null)
+      setProEditIdx(null)
+      onProfessionalsChange()
+      showToast('Profissional salvo.')
+    } catch (err) {
+      showToast(`Erro ao salvar: ${err.message}`, 'error')
+    } finally {
+      setProSaving(false)
     }
-    setProSaving(false); onProfessionalsChange(); setProEditIdx(null)
-    showToast('Profissional salvo.')
   }
 
   async function toggleProActive(pro) {
@@ -1754,25 +1809,63 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
           <p style={{ fontFamily: FONT, fontSize: 13, color: T.muted, marginBottom: 20 }}>
             Gerencie os profissionais da sua barbearia. Clientes poderão escolher com quem querem ser atendidos.
           </p>
+          {/* input de arquivo oculto */}
+          <input
+            ref={proAvatarInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleAvatarSelect}
+          />
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
             {localPros.map((pro, idx) => (
               <div key={pro.id ?? idx}>
                 {proEditIdx === idx ? (
                   <Card style={{ padding: 16 }}>
+                    {/* avatar upload */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 20 }}>
+                      <div
+                        onClick={() => proAvatarInputRef.current?.click()}
+                        style={{ width: 80, height: 80, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: ACCENT_DIM, border: `2px solid ${proEditAvatarPreview || pro.avatar_url ? ACCENT : HAIRLINE}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'border-color 0.15s' }}
+                      >
+                        {(proEditAvatarPreview || pro.avatar_url) ? (
+                          <img src={proEditAvatarPreview || pro.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <span style={{ fontFamily: FONT_MONO, fontSize: 24, fontWeight: 700, color: ACCENT }}>
+                            {(proEditName || '?').slice(0, 1).toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, marginTop: 8, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                        {proEditAvatarPreview || pro.avatar_url ? 'Clique para trocar' : 'Adicionar foto'}
+                      </p>
+                    </div>
+
                     <Input label="Nome" placeholder="João" value={proEditName} onChange={e => setProEditName(e.target.value)} />
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <SecBtn onClick={() => { setProEditIdx(null); if (!pro.id) setLocalPros(p => p.filter((_, i) => i !== idx)) }} style={{ flex: 1 }}>Cancelar</SecBtn>
+                      <SecBtn onClick={() => cancelProEdit(idx, pro)} style={{ flex: 1 }}>Cancelar</SecBtn>
                       <PrimaryBtn onClick={savePro} disabled={!proEditName.trim() || proSaving} style={{ flex: 2 }}>{proSaving ? 'Salvando...' : 'Salvar'}</PrimaryBtn>
                     </div>
                   </Card>
                 ) : (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, opacity: pro.active === false ? 0.5 : 1 }}>
+                    {/* avatar */}
+                    <div style={{ width: 40, height: 40, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: ACCENT_DIM, border: `1px solid rgba(235,188,99,0.3)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {pro.avatar_url ? (
+                        <img src={pro.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{ fontFamily: FONT_MONO, fontSize: 14, fontWeight: 700, color: ACCENT }}>
+                          {(pro.name || '?').slice(0, 1).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
                     <div style={{ flex: 1 }}>
                       <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary }}>{pro.name || '(sem nome)'}</p>
                       {pro.id && <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, marginTop: 2 }}>{pro.active !== false ? 'Ativo' : 'Inativo'}</p>}
                     </div>
                     {pro.id && <IconBtn onClick={() => toggleProActive(pro)}>{pro.active !== false ? 'desativar' : 'ativar'}</IconBtn>}
-                    <IconBtn onClick={() => { setProEditIdx(idx); setProEditName(pro.name) }}>editar</IconBtn>
+                    <IconBtn onClick={() => openProEdit(idx, pro)}>editar</IconBtn>
                     <IconBtn onClick={() => removePro(pro)} danger>×</IconBtn>
                   </div>
                 )}
