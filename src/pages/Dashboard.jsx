@@ -802,9 +802,16 @@ function ProSlotCell({ status, isBlocking, onClick }) {
         </>
       )}
       {isBlocked && (
-        <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: '#F87171', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-          {isBlocking ? '...' : 'Bloqueado'}
-        </span>
+        <>
+          <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: '#F87171', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+            {isBlocking ? '...' : 'Bloqueado'}
+          </span>
+          {!isBlocking && hovered && (
+            <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: 'rgba(248,113,113,0.6)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2 }}>
+              Desbloquear
+            </span>
+          )}
+        </>
       )}
       {!isBooked && !isBlocked && hovered && !isBlocking && (
         <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
