@@ -822,6 +822,122 @@ function ProSlotCell({ status, isBlocking, onClick }) {
   )
 }
 
+// ── modal de recorte de avatar ────────────────────────────────────────────────
+function AvatarCropModal({ file, onConfirm, onCancel }) {
+  const canvasRef  = useRef(null)
+  const imgRef     = useRef(null)
+  const dragStart  = useRef(null)
+  const [zoom,     setZoom]     = useState(1)
+  const [offset,   setOffset]   = useState({ x: 0, y: 0 })
+  const [dragging, setDragging] = useState(false)
+  const [ready,    setReady]    = useState(false)
+
+  const SIZE = 280
+
+  useEffect(() => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => { imgRef.current = img; setReady(true) }
+    img.src = url
+    return () => URL.revokeObjectURL(url)
+  }, [file])
+
+  useEffect(() => { if (ready) draw() }, [ready, zoom, offset])
+
+  function draw() {
+    const canvas = canvasRef.current
+    if (!canvas || !imgRef.current) return
+    const ctx = canvas.getContext('2d')
+    const img = imgRef.current
+    ctx.clearRect(0, 0, SIZE, SIZE)
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(SIZE / 2, SIZE / 2, SIZE / 2, 0, Math.PI * 2)
+    ctx.clip()
+    const scale = Math.max(SIZE / img.width, SIZE / img.height) * zoom
+    const w = img.width * scale
+    const h = img.height * scale
+    const x = (SIZE - w) / 2 + offset.x
+    const y = (SIZE - h) / 2 + offset.y
+    ctx.drawImage(img, x, y, w, h)
+    ctx.restore()
+    ctx.strokeStyle = ACCENT
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(SIZE / 2, SIZE / 2, SIZE / 2 - 1, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+
+  function getPos(e) {
+    const rect = canvasRef.current.getBoundingClientRect()
+    const src = e.touches?.[0] ?? e
+    return { x: src.clientX - rect.left, y: src.clientY - rect.top }
+  }
+
+  function onDown(e)  {
+    setDragging(true)
+    const p = getPos(e)
+    dragStart.current = { x: p.x - offset.x, y: p.y - offset.y }
+  }
+  function onMove(e)  {
+    if (!dragging) return
+    const p = getPos(e)
+    setOffset({ x: p.x - dragStart.current.x, y: p.y - dragStart.current.y })
+  }
+  function onUp()     { setDragging(false) }
+
+  function confirm() {
+    const img = imgRef.current
+    const OUT = 400
+    const out = document.createElement('canvas')
+    out.width = out.height = OUT
+    const ctx = out.getContext('2d')
+    ctx.beginPath()
+    ctx.arc(OUT / 2, OUT / 2, OUT / 2, 0, Math.PI * 2)
+    ctx.clip()
+    const scale = Math.max(SIZE / img.width, SIZE / img.height) * zoom
+    const w = img.width  * scale
+    const h = img.height * scale
+    const x = (SIZE - w) / 2 + offset.x
+    const y = (SIZE - h) / 2 + offset.y
+    const r = OUT / SIZE
+    ctx.drawImage(img, x * r, y * r, w * r, h * r)
+    out.toBlob(blob => onConfirm(blob), 'image/jpeg', 0.9)
+  }
+
+  return (
+    <Modal onClose={onCancel}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
+        <p style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+          Recortar foto
+        </p>
+        <canvas
+          ref={canvasRef}
+          width={SIZE}
+          height={SIZE}
+          style={{ cursor: dragging ? 'grabbing' : 'grab', borderRadius: '50%', touchAction: 'none', maxWidth: '100%' }}
+          onMouseDown={onDown}  onMouseMove={onMove}  onMouseUp={onUp}  onMouseLeave={onUp}
+          onTouchStart={onDown} onTouchMove={onMove}  onTouchEnd={onUp}
+        />
+        <div style={{ width: '100%' }}>
+          <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>
+            Zoom
+          </p>
+          <input
+            type="range" min={1} max={3} step={0.01} value={zoom}
+            onChange={e => setZoom(parseFloat(e.target.value))}
+            style={{ width: '100%', accentColor: ACCENT }}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+          <SecBtn onClick={onCancel} style={{ flex: 1 }}>Cancelar</SecBtn>
+          <PrimaryBtn onClick={confirm} disabled={!ready} style={{ flex: 2 }}>Confirmar</PrimaryBtn>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 // ── modal de agendamento manual ───────────────────────────────────────────────
 function ManualBookingModal({ owner, services, professionals, defaultDate, onClose, onSaved, showToast }) {
   const [form, setForm] = useState({
@@ -1586,8 +1702,9 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
   const [proEditIdx,         setProEditIdx]         = useState(null)
   const [proEditName,        setProEditName]        = useState('')
   const [proSaving,          setProSaving]          = useState(false)
-  const [proEditAvatarFile,  setProEditAvatarFile]  = useState(null)
+  const [proEditAvatarFile,    setProEditAvatarFile]    = useState(null)
   const [proEditAvatarPreview, setProEditAvatarPreview] = useState(null)
+  const [cropFile,             setCropFile]             = useState(null)
   const proAvatarInputRef = useRef(null)
 
   useEffect(() => { setLocalPros(professionals ?? []) }, [professionals])
@@ -1595,16 +1712,25 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
   function handleAvatarSelect(e) {
     const file = e.target.files?.[0]
     if (!file) return
-    if (proEditAvatarPreview) URL.revokeObjectURL(proEditAvatarPreview)
-    setProEditAvatarFile(file)
-    setProEditAvatarPreview(URL.createObjectURL(file))
+    setCropFile(file)
     e.target.value = ''
   }
+
+  function handleCropConfirm(blob) {
+    if (proEditAvatarPreview) URL.revokeObjectURL(proEditAvatarPreview)
+    const preview = URL.createObjectURL(blob)
+    setProEditAvatarFile(new File([blob], 'avatar.jpg', { type: 'image/jpeg' }))
+    setProEditAvatarPreview(preview)
+    setCropFile(null)
+  }
+
+  function handleCropCancel() { setCropFile(null) }
 
   function openProEdit(idx, pro) {
     if (proEditAvatarPreview) URL.revokeObjectURL(proEditAvatarPreview)
     setProEditAvatarFile(null)
     setProEditAvatarPreview(null)
+    setCropFile(null)
     setProEditIdx(idx)
     setProEditName(pro.name)
   }
@@ -1615,6 +1741,7 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
     if (proEditAvatarPreview) URL.revokeObjectURL(proEditAvatarPreview)
     setProEditAvatarFile(null)
     setProEditAvatarPreview(null)
+    setCropFile(null)
   }
 
   async function savePro() {
@@ -1874,6 +2001,14 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
           </div>
           <GhostBtn onClick={addPro} style={{ color: ACCENT }}>+ Adicionar profissional</GhostBtn>
         </div>
+      )}
+
+      {cropFile && (
+        <AvatarCropModal
+          file={cropFile}
+          onConfirm={handleCropConfirm}
+          onCancel={handleCropCancel}
+        />
       )}
     </div>
   )
