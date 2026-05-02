@@ -12,13 +12,14 @@ export function NavalhaMark({ size = 32, color = ACCENT }) {
 
 export function NavalhaLogo() {
   return (
-    <svg viewBox="0 0 324 120" style={{ width: '100%', maxWidth: 220, height: 'auto' }}>
-      <g transform="translate(0,36)">
+    <svg viewBox="0 0 300 56" style={{ width: '100%', maxWidth: 220, height: 'auto' }}>
+      <g transform="translate(0,4)">
         <rect x="0.7" y="0.7" width="46.6" height="46.6" rx="2" fill="none" stroke={ACCENT} strokeWidth="1.4"/>
         <path d="M8 40 L24 8 L32 22 L40 8" stroke={ACCENT} strokeWidth="2.6" fill="none" strokeLinecap="square" strokeLinejoin="miter"/>
       </g>
-      <text x="64" y="62" fontFamily="'Space Grotesk', sans-serif" fontSize="28" fontWeight="700" letterSpacing="6" fill={T.primary}>NAVALHA</text>
-      <text x="64" y="84" fontFamily="'JetBrains Mono', monospace" fontSize="9" fontWeight="500" letterSpacing="3.5" fill={T.hint} opacity="0.7">ADMIN PANEL</text>
+      <text x="62" y="38" fontFamily="'Space Grotesk', sans-serif" fontSize="26" fontWeight="700" letterSpacing="2">
+        <tspan fill={T.primary}>NAVALHA </tspan><tspan fill={ACCENT}>APP</tspan>
+      </text>
     </svg>
   )
 }
