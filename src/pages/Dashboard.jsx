@@ -4,7 +4,7 @@ import {
   NavalhaLogo, Eyebrow, PrimaryBtn, SecBtn, GhostBtn, IconBtn,
   Badge, Card, Modal, Toast, Spinner, Divider, PageTitle, Input,
 } from '../components/ui.jsx'
-import { FONT, FONT_MONO, T, ACCENT, ACCENT_DIM, INK, INK2, HAIRLINE, RADIUS, STATUS_COLOR } from '../tokens.js'
+import { FONT, FONT_MONO, T, ACCENT, ACCENT_DIM, INK, INK2, HAIRLINE, RADIUS, STATUS_COLOR, applyTheme } from '../tokens.js'
 
 // URL base do app de agendamento do cliente
 const CLIENT_APP_URL = 'https://navalha-app.pages.dev'
@@ -2024,6 +2024,8 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
   const isMobile = useIsMobile()
   const [owner,         setOwner]         = useState(initialOwner)
   const [section,       setSection]       = useState('bookings')
+  const [darkMode,      setDarkMode]      = useState(() => localStorage.getItem('navalha.theme') !== 'light')
+  const toggleTheme = () => setDarkMode(d => { applyTheme(!d); return !d })
   const [bookings,      setBookings]      = useState([])
   const [services,      setServices]      = useState([])
   const [hoursConfig,   setHoursConfig]   = useState({})
@@ -2198,6 +2200,14 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
             </button>
           </div>
         )}
+        <button onClick={toggleTheme}
+          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: RADIUS, border: `1px solid ${HAIRLINE}`, cursor: 'pointer', background: 'transparent', color: T.muted, fontFamily: FONT, fontSize: 13, marginBottom: 8, transition: 'color 0.15s' }}>
+          {darkMode
+            ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="square"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="square"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          }
+          {darkMode ? 'Modo claro' : 'Modo escuro'}
+        </button>
         <GhostBtn onClick={onSignOut} style={{ fontSize: 12, color: '#F87171' }}>Sair</GhostBtn>
       </div>
     </div>
