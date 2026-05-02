@@ -869,9 +869,13 @@ function AvatarCropModal({ file, onConfirm, onCancel }) {
   }
 
   function getPos(e) {
-    const rect = canvasRef.current.getBoundingClientRect()
-    const src = e.touches?.[0] ?? e
-    return { x: src.clientX - rect.left, y: src.clientY - rect.top }
+    const canvas = canvasRef.current
+    const rect   = canvas.getBoundingClientRect()
+    const src    = e.touches?.[0] ?? e
+    // converte CSS pixels → canvas pixels (canvas pode estar escalado via CSS)
+    const scaleX = canvas.width  / rect.width
+    const scaleY = canvas.height / rect.height
+    return { x: (src.clientX - rect.left) * scaleX, y: (src.clientY - rect.top) * scaleY }
   }
 
   function onDown(e)  {
@@ -1768,7 +1772,7 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
           .from('avatars').upload(path, proEditAvatarFile, { upsert: true })
         if (upErr) throw upErr
         const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
-        avatarUrl = urlData.publicUrl
+        avatarUrl = urlData.publicUrl + `?t=${Date.now()}`
       }
 
       // 3. salvar nome + avatar_url
