@@ -528,7 +528,7 @@ function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRef
       <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <div>
           <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Data</p>
-          <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={{ padding: '10px 12px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, color: T.primary, fontFamily: FONT_MONO, fontSize: 13, colorScheme: 'dark', cursor: 'pointer' }} />
+          <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={{ padding: '10px 12px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, color: T.primary, fontFamily: FONT_MONO, fontSize: 13, colorScheme: darkMode ? 'dark' : 'light', cursor: 'pointer' }} />
         </div>
         <div>
           <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Status</p>
@@ -713,7 +713,7 @@ function SlotRow({ hour, status, isBlocking, onClick }) {
     mainColor  = '#F87171'
   } else {
     mainLabel  = 'Disponível'
-    mainColor  = 'rgba(245,234,208,0.25)'
+    mainColor  = 'var(--text-available)'
   }
 
   return (
@@ -1305,7 +1305,7 @@ function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, block
                   {selSlotsGrouped.morning.length > 0 && (
                     <>
                       <tr>
-                        <td colSpan={professionals.length + 1} style={{ padding: '5px 14px', fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', background: 'rgba(17,12,8,0.5)', borderTop: `1px solid ${HAIRLINE}` }}>
+                        <td colSpan={professionals.length + 1} style={{ padding: '5px 14px', fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', background: 'var(--section-header-bg)', borderTop: `1px solid ${HAIRLINE}` }}>
                           Manhã
                         </td>
                       </tr>
@@ -1332,7 +1332,7 @@ function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, block
                   {selSlotsGrouped.afternoon.length > 0 && (
                     <>
                       <tr>
-                        <td colSpan={professionals.length + 1} style={{ padding: '5px 14px', fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', background: 'rgba(17,12,8,0.5)', borderTop: `1px solid ${HAIRLINE}` }}>
+                        <td colSpan={professionals.length + 1} style={{ padding: '5px 14px', fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', background: 'var(--section-header-bg)', borderTop: `1px solid ${HAIRLINE}` }}>
                           Tarde
                         </td>
                       </tr>
@@ -2024,7 +2024,7 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
   const isMobile = useIsMobile()
   const [owner,         setOwner]         = useState(initialOwner)
   const [section,       setSection]       = useState('bookings')
-  const [darkMode,      setDarkMode]      = useState(() => localStorage.getItem('navalha.theme') !== 'light')
+  const [darkMode,      setDarkMode]      = useState(() => localStorage.getItem('navalha.theme') === 'dark')
   const toggleTheme = () => setDarkMode(d => { applyTheme(!d); return !d })
   const [bookings,      setBookings]      = useState([])
   const [services,      setServices]      = useState([])

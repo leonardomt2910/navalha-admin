@@ -68,7 +68,7 @@ export function SecBtn({ children, onClick, disabled, type = 'button', style = {
       disabled={disabled}
       style={{
         width: '100%', padding: '13px 20px', background: 'transparent',
-        color: disabled ? T.hint : T.primary, border: `1px solid ${disabled ? HAIRLINE : 'rgba(245,234,208,0.25)'}`,
+        color: disabled ? T.hint : T.primary, border: `1px solid ${HAIRLINE}`,
         borderRadius: RADIUS, fontFamily: FONT, fontWeight: 600, fontSize: 14,
         cursor: disabled ? 'not-allowed' : 'pointer', transition: 'border-color 0.15s', ...style,
       }}
