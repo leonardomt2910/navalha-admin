@@ -1103,7 +1103,7 @@ function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, block
   // usado no modo sem profissionais (lista única)
   function slotStatus(hour) {
     if (!selDayStr) return { type: 'free' }
-    const booking = bookings.find(b => b.date === selDayStr && b.hour?.slice(0, 5) === hour)
+    const booking = bookings.find(b => b.date === selDayStr && b.hour?.slice(0, 5) === hour && b.status !== 'cancelled')
     if (booking) return { type: 'booked', booking }
     const slot = blockedSlots.find(s => s.date === selDayStr && s.hour?.slice(0, 5) === hour)
     if (slot) return { type: 'blocked', slot }
@@ -1116,7 +1116,8 @@ function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, block
     const booking = bookings.find(b =>
       b.date === selDayStr &&
       b.hour?.slice(0, 5) === hour &&
-      b.professional_id === proId
+      b.professional_id === proId &&
+      b.status !== 'cancelled'
     )
     if (booking) return { type: 'booked', booking }
     const slot = blockedSlots.find(s =>
@@ -1463,7 +1464,7 @@ function ReportsSection({ bookings, onRefresh, professionals }) {
   const proFilter = b => filterProfessional === 'all' ? true : (b.professional_id === filterProfessional || b.professional_id === null)
   const inMonth   = bookings.filter(b => b.date.startsWith(selMonth) && proFilter(b))
   const confirmed = inMonth.filter(b => (b.status === 'confirmed' || b.status === 'manual') && alreadyOccurred(b))
-  const cancelled = inMonth.filter(b => b.status === 'rejected')
+  const cancelled = inMonth.filter(b => b.status === 'rejected' || b.status === 'cancelled')
   const pending   = inMonth.filter(b => b.status === 'pending' || ((b.status === 'confirmed' || b.status === 'manual') && !alreadyOccurred(b)))
   const revenue   = confirmed.reduce((sum, b) => sum + (b.services?.price_cents ?? 0), 0)
 
@@ -2135,7 +2136,7 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
   const Sidebar = (
     <div style={{ width: 220, flexShrink: 0, background: INK2, borderRight: `1px solid ${HAIRLINE}`, display: 'flex', flexDirection: 'column', minHeight: '100vh', position: 'sticky', top: 0 }}>
       <div style={{ padding: '24px 20px 20px', borderBottom: `1px solid ${HAIRLINE}` }}>
-        <NavalhaLogo size={28} />
+        <NavalhaLogo />
       </div>
       <nav style={{ flex: 1, padding: '12px 10px' }}>
         {NAV.map(item => {
@@ -2205,7 +2206,7 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
   // ── top bar (mobile) ───────────────────────────────────────────────────────
   const TopBar = isMobile && (
     <div style={{ position: 'sticky', top: 0, zIndex: 50, background: INK2, borderBottom: `1px solid ${HAIRLINE}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}>
-      <NavalhaLogo size={22} />
+      <NavalhaLogo />
       <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: T.primary }}>
         {NAV.find(n => n.key === section)?.label ?? ''}
       </p>

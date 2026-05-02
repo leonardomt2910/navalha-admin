@@ -4,21 +4,22 @@ import { ACCENT, ACCENT_DEEP, ACCENT_DIM, INK, INK2, T, FONT, FONT_MONO, RADIUS,
 export function NavalhaMark({ size = 32, color = ACCENT }) {
   return (
     <svg width={size} height={size} viewBox="0 0 48 48" fill="none">
-      <rect width="48" height="48" rx="10" fill={color} fillOpacity="0.12" />
-      <path d="M8 40 L24 8 L32 22 L40 8" stroke={color} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="0.7" y="0.7" width="46.6" height="46.6" rx="2" fill="none" stroke={color} strokeWidth="1.4"/>
+      <path d="M8 40 L24 8 L32 22 L40 8" stroke={color} strokeWidth="2.6" fill="none" strokeLinecap="square" strokeLinejoin="miter"/>
     </svg>
   )
 }
 
-export function NavalhaLogo({ size = 28 }) {
+export function NavalhaLogo() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <NavalhaMark size={size} />
-      <div>
-        <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: size * 0.6, color: T.primary, letterSpacing: 6, lineHeight: 1 }}>NAVALHA</div>
-        <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, letterSpacing: 1.5, marginTop: 2 }}>ADMIN PANEL</div>
-      </div>
-    </div>
+    <svg viewBox="0 0 324 120" style={{ width: '100%', maxWidth: 220, height: 'auto' }}>
+      <g transform="translate(0,36)">
+        <rect x="0.7" y="0.7" width="46.6" height="46.6" rx="2" fill="none" stroke={ACCENT} strokeWidth="1.4"/>
+        <path d="M8 40 L24 8 L32 22 L40 8" stroke={ACCENT} strokeWidth="2.6" fill="none" strokeLinecap="square" strokeLinejoin="miter"/>
+      </g>
+      <text x="64" y="62" fontFamily="'Space Grotesk', sans-serif" fontSize="28" fontWeight="700" letterSpacing="6" fill={T.primary}>NAVALHA</text>
+      <text x="64" y="84" fontFamily="'JetBrains Mono', monospace" fontSize="9" fontWeight="500" letterSpacing="3.5" fill={T.hint} opacity="0.7">ADMIN PANEL</text>
+    </svg>
   )
 }
 
