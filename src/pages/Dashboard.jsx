@@ -497,7 +497,7 @@ function PlansSection({ owner }) {
 }
 
 // ── seção agendamentos ─────────────────────────────────────────────────────────
-function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRefresh, professionals }) {
+function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRefresh, professionals, darkMode }) {
   const isMobile = useIsMobile()
   const [filterDate,       setFilterDate]       = useState('')
   const [filterStatus,     setFilterStatus]     = useState('all')
@@ -2310,7 +2310,7 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
         )}
 
         {section === 'bookings' && (
-          <BookingsSection bookings={bookings} loading={loading} updateStatus={updateStatus} deleteBooking={deleteBooking} onRefresh={loadBookings} professionals={professionals} />
+          <BookingsSection bookings={bookings} loading={loading} updateStatus={updateStatus} deleteBooking={deleteBooking} onRefresh={loadBookings} professionals={professionals} darkMode={darkMode} />
         )}
         {section === 'calendar' && (
           <CalendarSection
