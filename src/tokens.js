@@ -44,7 +44,11 @@ export function applyTheme(dark) {
   Object.entries(vars).forEach(([k,v]) => document.documentElement.style.setProperty(k,v))
   localStorage.setItem('navalha.theme', dark ? 'dark' : 'light')
 }
-// padrão: modo claro
+// migração: versões antigas salvavam 'dark' como padrão; reseta para claro na primeira vez
+if (!localStorage.getItem('navalha.theme.v2')) {
+  localStorage.setItem('navalha.theme', 'light')
+  localStorage.setItem('navalha.theme.v2', '1')
+}
 applyTheme(localStorage.getItem('navalha.theme') === 'dark')
 
 export const STATUS_COLOR = {

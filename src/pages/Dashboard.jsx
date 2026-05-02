@@ -2136,11 +2136,11 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
 
   // ── sidebar (desktop) ─────────────────────────────────────────────────────
   const Sidebar = (
-    <div style={{ width: 220, flexShrink: 0, background: INK2, borderRight: `1px solid ${HAIRLINE}`, display: 'flex', flexDirection: 'column', minHeight: '100vh', position: 'sticky', top: 0 }}>
-      <div style={{ padding: '24px 20px 20px', borderBottom: `1px solid ${HAIRLINE}` }}>
+    <div style={{ width: 220, flexShrink: 0, background: INK2, borderRight: `1px solid ${HAIRLINE}`, display: 'flex', flexDirection: 'column', height: '100vh', position: 'sticky', top: 0 }}>
+      <div style={{ flexShrink: 0, padding: '24px 20px 20px', borderBottom: `1px solid ${HAIRLINE}` }}>
         <NavalhaLogo />
       </div>
-      <nav style={{ flex: 1, padding: '12px 10px' }}>
+      <nav style={{ flex: 1, padding: '12px 10px', overflowY: 'auto' }}>
         {NAV.map(item => {
           const active = section === item.key
           return (
@@ -2152,7 +2152,7 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
           )
         })}
       </nav>
-      <div style={{ padding: '16px 20px', borderTop: `1px solid ${HAIRLINE}` }}>
+      <div style={{ flexShrink: 0, padding: '16px 20px', borderTop: `1px solid ${HAIRLINE}` }}>
         <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Barbearia</p>
         <p style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: T.primary, marginBottom: 2 }}>{owner.name}</p>
         {/* timer de trial */}
