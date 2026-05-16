@@ -1924,8 +1924,8 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
             {DIAS.map((dia, wd) => {
               const cfg = localHours[wd] || { open: false, morning_start: null, morning_end: null, afternoon_start: null, afternoon_end: null }
               const turnos = [
-                { key: 'morning',   label: 'Manhã', time: '06:00 – 12:00', start: '06:00', end: '12:00' },
-                { key: 'afternoon', label: 'Tarde', time: '13:00 – 20:00', start: '13:00', end: '20:00' },
+                { key: 'morning',   label: 'Manhã', defStart: '09:00', defEnd: '12:00' },
+                { key: 'afternoon', label: 'Tarde', defStart: '13:00', defEnd: '20:00' },
               ]
               return (
                 <div key={wd} style={{ background: INK2, border: `1px solid ${cfg.open ? HAIRLINE : 'transparent'}`, borderRadius: RADIUS, overflow: 'hidden', transition: 'border-color 0.2s' }}>
@@ -1936,24 +1936,28 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
                       <Toggle on={cfg.open} onChange={v => setHourField(wd, 'open', v)} />
                     </div>
                   </div>
-                  {cfg.open && turnos.map(({ key, label, time, start, end }, i) => {
+                  {cfg.open && turnos.map(({ key, label, defStart, defEnd }) => {
                     const isOn = !!cfg[`${key}_start`]
                     return (
-                      <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderTop: `1px solid ${HAIRLINE}` }}>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                          <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: isOn ? T.primary : T.hint }}>{label}</span>
-                          <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.hint }}>{time}</span>
-                        </div>
+                      <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderTop: `1px solid ${HAIRLINE}`, gap: 12, flexWrap: 'wrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: isOn ? ACCENT : T.hint }}>{isOn ? 'Aberto' : 'Fechado'}</span>
+                          <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: isOn ? ACCENT : T.hint, minWidth: 52 }}>{isOn ? 'Aberto' : 'Fechado'}</span>
                           <Toggle on={isOn} onChange={v => {
                             setHoursDirty(true)
                             setLocalHours(h => ({
                               ...h,
-                              [wd]: { ...h[wd], [`${key}_start`]: v ? start : null, [`${key}_end`]: v ? end : null }
+                              [wd]: { ...h[wd], [`${key}_start`]: v ? defStart : null, [`${key}_end`]: v ? defEnd : null }
                             }))
                           }} />
+                          <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: isOn ? T.primary : T.hint }}>{label}</span>
                         </div>
+                        {isOn && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <TimeSelect value={cfg[`${key}_start`] ?? ''} onChange={v => setHourField(wd, `${key}_start`, v)} placeholder="início" />
+                            <span style={{ color: T.hint, fontSize: 12, flexShrink: 0 }}>→</span>
+                            <TimeSelect value={cfg[`${key}_end`] ?? ''} onChange={v => setHourField(wd, `${key}_end`, v)} placeholder="fim" />
+                          </div>
+                        )}
                       </div>
                     )
                   })}
