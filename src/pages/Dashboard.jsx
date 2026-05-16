@@ -499,16 +499,29 @@ function PlansSection({ owner }) {
 // ── seção agendamentos ─────────────────────────────────────────────────────────
 function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRefresh, professionals, darkMode }) {
   const isMobile = useIsMobile()
-  const [filterDate,       setFilterDate]       = useState('')
+  const [filterFrom,       setFilterFrom]       = useState('')
+  const [filterTo,         setFilterTo]         = useState('')
   const [filterStatus,     setFilterStatus]     = useState('all')
   const [filterProfessional, setFilterProfessional] = useState('all')
   const [detail,           setDetail]           = useState(null)
 
+  const noDateFilter = !filterFrom && !filterTo
+
   const filtered = bookings.filter(b => {
-    const matchDate   = !filterDate || b.date === filterDate
+    // sem filtro de data → mostra apenas agendamentos futuros (a partir do momento atual)
+    if (noDateFilter) {
+      const now = new Date()
+      const todayStr = now.toISOString().split('T')[0]
+      const nowHour  = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
+      if (b.date < todayStr) return false
+      if (b.date === todayStr && (b.hour ?? '').slice(0, 5) < nowHour) return false
+    } else {
+      if (filterFrom && b.date < filterFrom) return false
+      if (filterTo   && b.date > filterTo)   return false
+    }
     const matchStatus = filterStatus === 'all' || b.status === filterStatus
     const matchPro    = filterProfessional === 'all' || b.professional_id === filterProfessional
-    return matchDate && matchStatus && matchPro
+    return matchStatus && matchPro
   })
 
   const thStyle = { fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', padding: '10px 16px', textAlign: 'left', borderBottom: `1px solid ${HAIRLINE}`, whiteSpace: 'nowrap' }
@@ -527,8 +540,12 @@ function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRef
       </div>
       <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <div>
-          <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Data</p>
-          <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={{ padding: '10px 12px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, color: T.primary, fontFamily: FONT_MONO, fontSize: 13, colorScheme: darkMode ? 'dark' : 'light', cursor: 'pointer' }} />
+          <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>De</p>
+          <input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} style={{ padding: '10px 12px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, color: T.primary, fontFamily: FONT_MONO, fontSize: 13, colorScheme: darkMode ? 'dark' : 'light', cursor: 'pointer' }} />
+        </div>
+        <div>
+          <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Até</p>
+          <input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} style={{ padding: '10px 12px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, color: T.primary, fontFamily: FONT_MONO, fontSize: 13, colorScheme: darkMode ? 'dark' : 'light', cursor: 'pointer' }} />
         </div>
         <div>
           <p style={{ fontFamily: FONT_MONO, fontSize: 10, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Status</p>
@@ -548,13 +565,15 @@ function BookingsSection({ bookings, loading, updateStatus, deleteBooking, onRef
             </select>
           </div>
         )}
-        <GhostBtn onClick={() => { setFilterDate(''); setFilterStatus('all'); setFilterProfessional('all') }}>Limpar filtros</GhostBtn>
+        <GhostBtn onClick={() => { setFilterFrom(''); setFilterTo(''); setFilterStatus('all'); setFilterProfessional('all') }}>Limpar filtros</GhostBtn>
       </div>
 
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner /></div>
       ) : filtered.length === 0 ? (
-        <p style={{ fontFamily: FONT, fontSize: 14, color: T.hint, padding: '40px 0', textAlign: 'center' }}>Nenhum agendamento encontrado.</p>
+        <p style={{ fontFamily: FONT, fontSize: 14, color: T.hint, padding: '40px 0', textAlign: 'center' }}>
+          {noDateFilter ? 'Nenhum agendamento futuro.' : 'Nenhum agendamento no período selecionado.'}
+        </p>
       ) : isMobile ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {filtered.map(b => (
