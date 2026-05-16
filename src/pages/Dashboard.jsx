@@ -1696,11 +1696,14 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
 
   // ── horários ───────────────────────────────────────────────────────────────
   const [localHours,  setLocalHours]  = useState(hoursConfig)
+  const [hoursDirty,  setHoursDirty]  = useState(false)
   const [hoursSaving, setHoursSaving] = useState(false)
 
-  useEffect(() => { setLocalHours(hoursConfig) }, [hoursConfig])
+  // só sincroniza do DB quando não há edições pendentes — evita reset acidental
+  useEffect(() => { if (!hoursDirty) setLocalHours(hoursConfig) }, [hoursConfig, hoursDirty])
 
   function setHourField(wd, field, val) {
+    setHoursDirty(true)
     setLocalHours(h => ({ ...h, [wd]: { ...h[wd], [field]: val } }))
   }
 
@@ -1720,7 +1723,10 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
         await supabase.from('hours_config').insert({ ...payload, owner_id: owner.id, weekday: parseInt(wd) })
       }
     }
-    setHoursSaving(false); onHoursChange(); showToast('Horários salvos.')
+    setHoursDirty(false)
+    setHoursSaving(false)
+    onHoursChange()
+    showToast('Horários salvos.')
   }
 
   const labelStyle = { fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }
@@ -1916,7 +1922,11 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
         <div style={{ maxWidth: 600 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 24 }}>
             {DIAS.map((dia, wd) => {
-              const cfg = localHours[wd] || { open: false, morning_start: '', morning_end: '', afternoon_start: '', afternoon_end: '' }
+              const cfg = localHours[wd] || { open: false, morning_start: null, morning_end: null, afternoon_start: null, afternoon_end: null }
+              const turnos = [
+                { key: 'morning',   label: 'Manhã', time: '06:00 – 12:00', start: '06:00', end: '12:00' },
+                { key: 'afternoon', label: 'Tarde', time: '13:00 – 20:00', start: '13:00', end: '20:00' },
+              ]
               return (
                 <div key={wd} style={{ background: INK2, border: `1px solid ${cfg.open ? HAIRLINE : 'transparent'}`, borderRadius: RADIUS, overflow: 'hidden', transition: 'border-color 0.2s' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}>
@@ -1926,28 +1936,27 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
                       <Toggle on={cfg.open} onChange={v => setHourField(wd, 'open', v)} />
                     </div>
                   </div>
-                  {cfg.open && (
-                    <div style={{ padding: '0 16px 16px', borderTop: `1px solid ${HAIRLINE}` }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 12 }}>
-                        <div>
-                          <p style={labelStyle}>Manhã</p>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <TimeSelect value={cfg.morning_start} onChange={v => setHourField(wd, 'morning_start', v)} placeholder="início" />
-                            <span style={{ color: T.hint, fontSize: 12, flexShrink: 0 }}>→</span>
-                            <TimeSelect value={cfg.morning_end} onChange={v => setHourField(wd, 'morning_end', v)} placeholder="fim" />
-                          </div>
+                  {cfg.open && turnos.map(({ key, label, time, start, end }, i) => {
+                    const isOn = !!cfg[`${key}_start`]
+                    return (
+                      <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderTop: `1px solid ${HAIRLINE}` }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                          <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: isOn ? T.primary : T.hint }}>{label}</span>
+                          <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: T.hint }}>{time}</span>
                         </div>
-                        <div>
-                          <p style={labelStyle}>Tarde</p>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <TimeSelect value={cfg.afternoon_start} onChange={v => setHourField(wd, 'afternoon_start', v)} placeholder="início" />
-                            <span style={{ color: T.hint, fontSize: 12, flexShrink: 0 }}>→</span>
-                            <TimeSelect value={cfg.afternoon_end} onChange={v => setHourField(wd, 'afternoon_end', v)} placeholder="fim" />
-                          </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: isOn ? ACCENT : T.hint }}>{isOn ? 'Aberto' : 'Fechado'}</span>
+                          <Toggle on={isOn} onChange={v => {
+                            setHoursDirty(true)
+                            setLocalHours(h => ({
+                              ...h,
+                              [wd]: { ...h[wd], [`${key}_start`]: v ? start : null, [`${key}_end`]: v ? end : null }
+                            }))
+                          }} />
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )
+                  })}
                 </div>
               )
             })}
