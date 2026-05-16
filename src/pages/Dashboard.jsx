@@ -1924,7 +1924,7 @@ function SettingsSection({ owner, services, hoursConfig, professionals, onOwnerU
             {DIAS.map((dia, wd) => {
               const cfg = localHours[wd] || { open: false, morning_start: null, morning_end: null, afternoon_start: null, afternoon_end: null }
               const turnos = [
-                { key: 'morning',   label: 'Manhã', defStart: '09:00', defEnd: '12:00' },
+                { key: 'morning',   label: 'Manhã', defStart: '09:00', defEnd: '11:30' },
                 { key: 'afternoon', label: 'Tarde', defStart: '13:00', defEnd: '20:00' },
               ]
               return (
