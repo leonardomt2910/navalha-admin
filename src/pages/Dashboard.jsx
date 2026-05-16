@@ -1449,47 +1449,51 @@ function CalendarSection({ bookings, updateStatus, onRefresh, hoursConfig, block
 }
 
 // ── seção relatórios ──────────────────────────────────────────────────────────
-function ReportsSection({ bookings, onRefresh, professionals }) {
-  const currentMonth = today().slice(0, 7)
-  const [selMonth,            setSelMonth]            = useState(currentMonth)
+function ReportsSection({ bookings, onRefresh, professionals, darkMode }) {
+  // padrão: mês atual completo
+  const now = new Date()
+  const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  const lastOfMonth  = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
+
+  const [filterFrom,          setFilterFrom]          = useState(firstOfMonth)
+  const [filterTo,            setFilterTo]            = useState(lastOfMonth)
   const [filterProfessional,  setFilterProfessional]  = useState('all')
 
-  // meses disponíveis a partir dos bookings (únicos, decrescente)
-  const availableMonths = useMemo(() => {
-    const set = new Set(bookings.map(b => b.date.slice(0, 7)))
-    set.add(currentMonth)
-    return [...set].sort((a, b) => b.localeCompare(a))
-  }, [bookings, currentMonth])
-
-  function fmtMonthLabel(ym) {
-    const [y, m] = ym.split('-')
-    const name = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-    return name.charAt(0).toUpperCase() + name.slice(1)
-  }
-
-  // agendamento só entra no relatório se data+hora já passou
+  // agendamento só entra como confirmado se data+hora já passou
   function alreadyOccurred(b) {
     const now = new Date()
-    const slotDate = b.date
     const todayStr = now.toISOString().split('T')[0]
-    if (slotDate < todayStr) return true
-    if (slotDate > todayStr) return false
-    // mesmo dia: compara a hora
+    if (b.date < todayStr) return true
+    if (b.date > todayStr) return false
     const [h, m] = (b.hour ?? '23:59').split(':').map(Number)
     const slot = new Date(now); slot.setHours(h, m, 0, 0)
     return slot <= now
   }
 
+  function rangeLabelFor(from, to) {
+    const fmt = s => new Date(s + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+    if (!from && !to) return 'Todo o período'
+    if (from && to)   return `${fmt(from)} — ${fmt(to)}`
+    if (from)         return `A partir de ${fmt(from)}`
+    return `Até ${fmt(to)}`
+  }
+
   const proFilter = b => filterProfessional === 'all' ? true : (b.professional_id === filterProfessional || b.professional_id === null)
-  const inMonth   = bookings.filter(b => b.date.startsWith(selMonth) && proFilter(b))
-  const confirmed = inMonth.filter(b => (b.status === 'confirmed' || b.status === 'manual') && alreadyOccurred(b))
-  const cancelled = inMonth.filter(b => b.status === 'rejected' || b.status === 'cancelled')
-  const pending   = inMonth.filter(b => b.status === 'pending' || ((b.status === 'confirmed' || b.status === 'manual') && !alreadyOccurred(b)))
+  const inRange   = bookings.filter(b => {
+    if (filterFrom && b.date < filterFrom) return false
+    if (filterTo   && b.date > filterTo)   return false
+    return proFilter(b)
+  })
+  const confirmed = inRange.filter(b => (b.status === 'confirmed' || b.status === 'manual') && alreadyOccurred(b))
+  const cancelled = inRange.filter(b => b.status === 'rejected' || b.status === 'cancelled')
+  const pending   = inRange.filter(b => b.status === 'pending' || ((b.status === 'confirmed' || b.status === 'manual') && !alreadyOccurred(b)))
   const revenue   = confirmed.reduce((sum, b) => sum + (b.services?.price_cents ?? 0), 0)
 
   const totalConfirmed = bookings.filter(b => (b.status === 'confirmed' || b.status === 'manual') && alreadyOccurred(b) && proFilter(b)).length
 
-  const cardStyle = { background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, padding: '20px 22px' }
+  const cardStyle  = { background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, padding: '20px 22px' }
+  const inputStyle = { padding: '9px 12px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, color: T.primary, fontFamily: FONT_MONO, fontSize: 12, colorScheme: darkMode ? 'dark' : 'light', cursor: 'pointer' }
+  const labelStyle = { fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5 }
 
   return (
     <div>
@@ -1497,34 +1501,34 @@ function ReportsSection({ bookings, onRefresh, professionals }) {
         <h1 style={{ fontFamily: FONT, fontSize: 26, fontWeight: 700, color: T.primary, letterSpacing: '-0.02em', lineHeight: 1.1, margin: 0 }}>Relatórios</h1>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
           <div>
-            <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5 }}>Mês</p>
-            <select value={selMonth} onChange={e => setSelMonth(e.target.value)}
-              style={{ padding: '9px 14px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, color: T.primary, fontFamily: FONT_MONO, fontSize: 12, cursor: 'pointer', minWidth: 180 }}>
-              {availableMonths.map(ym => (
-                <option key={ym} value={ym}>{fmtMonthLabel(ym)}</option>
-              ))}
-            </select>
+            <p style={labelStyle}>De</p>
+            <input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <p style={labelStyle}>Até</p>
+            <input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} style={inputStyle} />
           </div>
           {professionals.length > 0 && (
             <div>
-              <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5 }}>Profissional</p>
-              <select value={filterProfessional} onChange={e => setFilterProfessional(e.target.value)} style={{ padding: '9px 14px', background: INK2, border: `1px solid ${HAIRLINE}`, borderRadius: RADIUS, color: T.primary, fontFamily: FONT_MONO, fontSize: 12, cursor: 'pointer', minWidth: 160 }}>
+              <p style={labelStyle}>Profissional</p>
+              <select value={filterProfessional} onChange={e => setFilterProfessional(e.target.value)} style={{ ...inputStyle, minWidth: 160 }}>
                 <option value="all">Todos</option>
                 {professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
           )}
+          <GhostBtn onClick={() => { setFilterFrom(firstOfMonth); setFilterTo(lastOfMonth); setFilterProfessional('all') }}>Mês atual</GhostBtn>
           <RefreshBtn onRefresh={onRefresh} />
         </div>
       </div>
 
-      {/* métricas do mês selecionado */}
+      {/* métricas do período selecionado */}
       <p style={{ fontFamily: FONT_MONO, fontSize: 9, color: T.hint, textTransform: 'uppercase', letterSpacing: '0.14em', marginBottom: 12 }}>
-        → {fmtMonthLabel(selMonth)}
+        → {rangeLabelFor(filterFrom, filterTo)}
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 32 }}>
         {[
-          { label: 'Total de agendamentos', value: inMonth.length,    sub: 'no mês' },
+          { label: 'Total de agendamentos', value: inRange.length,    sub: 'no período' },
           { label: 'Confirmados',           value: confirmed.length,  sub: 'concluídos ou manuais' },
           { label: 'Cancelados',            value: cancelled.length,  sub: 'rejeitados' },
           { label: 'Pendentes / Futuros',   value: pending.length,    sub: 'ainda não realizados' },
@@ -2339,7 +2343,7 @@ export default function Dashboard({ owner: initialOwner, onSignOut, onOwnerUpdat
           />
         )}
         {section === 'reports' && (
-          <ReportsSection bookings={bookings} onRefresh={loadBookings} professionals={professionals} />
+          <ReportsSection bookings={bookings} onRefresh={loadBookings} professionals={professionals} darkMode={darkMode} />
         )}
         {section === 'client-link' && (
           <ClientLinkSection owner={owner} showToast={showToast} />
